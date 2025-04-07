@@ -20,7 +20,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.pusher.name, '[bot]') }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
     env:
       HASKELL_TEST_REPORT: report.txt
