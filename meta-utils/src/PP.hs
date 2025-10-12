@@ -17,3 +17,13 @@ newtype OutShow a = OutShow { getOutShow :: a }
 instance Show a => Out (OutShow a) where
   doc = PP.text . show . getOutShow
   docPrec = const doc
+
+-- | Wrapper to make `Show` from `GenericPretty.Out`.
+newtype ShowOut a = ShowOut { getShowOut :: a }
+  deriving newtype (Eq, Ord, Enum, Bounded, Num, Semigroup, Monoid)
+  deriving stock (Generic, Functor)
+  deriving Applicative via Identity
+  deriving Monad via Identity
+
+instance Out a => Show (ShowOut a) where
+  show = pretty . getShowOut
