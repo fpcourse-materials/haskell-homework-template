@@ -1,6 +1,6 @@
 module PP
   ( module Text.PrettyPrint.GenericPretty
-  , OutShow (..)
+  , OutShow (..), ShowOut (..)
   ) where
 
 import Data.Functor.Identity
