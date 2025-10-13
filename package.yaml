@@ -48,6 +48,7 @@ default-extensions:
   - LambdaCase
   - MultiParamTypeClasses
   - NamedFieldPuns
+  - OverloadedLabels
   - PatternSynonyms
   - PolyKinds
   - QuantifiedConstraints
