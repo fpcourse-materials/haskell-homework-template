@@ -73,6 +73,7 @@ todoImpl className dataName = do
     TyConI (DataD _ _ tyArgs _ _ _) -> pure $ length tyArgs
     TyConI (NewtypeD _ _ tyArgs _ _ _) -> pure $ length tyArgs
     TyConI (TySynD (nameBase -> "->") [] _) -> pure 2
+    TyConI (TySynD nameBase [] _) | show nameBase == "GHC.Base.String" -> pure 0
     x -> fail $ "unsupported data, got " <> show x
   target <- mkInstanceTarget classInfo DataInfo {..}
   let decls = map (sigToDec (show dataName) (show className)) $ filter isSigD sigs

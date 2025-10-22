@@ -16,6 +16,9 @@ class MonadError e m | m -> e where
   throwError :: e -> m a
   catchError :: m a -> (e -> m a) -> m a
 
+class Expr domain where
+  c :: Int -> domain
+
 todoImpl ''Eq ''Data
 todoImpl ''Functor ''Data
 todoImpl ''Applicative ''Data
@@ -25,6 +28,7 @@ todoImpl ''Traversable ''Data
 todoImpl ''MonadTrans ''Data'
 todoImpl ''MonadError ''Data''
 todoImpl ''MonadError ''ExceptT
+todoImpl ''Expr ''String
 
 main :: IO ()
 main = HU.runTestTTAndExit $ TestList
@@ -44,6 +48,7 @@ testMacro = TestList
   , TestCase $ assertThrows (lift (Identity 42) :: Data' Identity Int)
   , TestCase $ assertThrows (throwError "aaaa" :: Data'' String Int)
   , TestCase $ assertThrows (catchError undefined undefined :: ExceptT String Identity Int)
+  , TestCase $ assertThrows $ c 42 == "42"
   ]
   where
     value = Ok 42 :: Data Int
