@@ -2,7 +2,6 @@
 module Lalalang.Syntax where
 
 import Data.List qualified as List
-import Lalalang.Utils
 import MetaUtils
 
 -- | Перечень бинарных операций Lalalang.
@@ -26,12 +25,11 @@ type LaCtorName = String
 
 -- | Деревья выражений Lalalang.
 data LaExpr
-  = LaUnit
-  | LaConst Int
+  = LaConst Int
   | LaVar LaName
   | LaBinOp LaBinOp LaExpr LaExpr
-  | LaLam [LaName] LaExpr
-  | LaApp LaExpr [LaExpr]
+  | LaLam LaName LaExpr
+  | LaApp LaExpr LaExpr
   | LaLetIn LaName LaExpr LaExpr
   | LaNew LaCtorName [LaExpr]
   | LaMatch LaExpr [LaBranch]
@@ -43,20 +41,22 @@ instance Show LaExpr where
   show = \case
     LaConst value -> show value
     LaVar name -> name
-    LaBinOp op l r -> inParens $ show l <> " " <> show op <> " " <> show r
-    LaLam params body -> inParens $ "\\" <> showParams params <> " " <> show body
-    LaApp f args -> inParens $ show f <> showArgs args
+    LaBinOp op l r -> parens $ show l <> " " <> show op <> " " <> show r
+    LaLam name body -> parens $ "\\" <> name <> " -> " <> show body
+    LaApp l r -> parens $ show l <> " " <> show r
     LaLetIn name expr body -> if name == "_" 
       then show expr <> "\n" <> show body
       else "let " <> name <> " = " <> show expr <> "\n" <> show body
-    LaNew ctor args -> ctor <> showArgs args
+    LaNew name args -> name <> "(" <> List.intercalate ", " (map show args) <> ")"
     LaMatch scrutenee branches -> 
       "match " <> show scrutenee <> 
-      " {\n" <> List.intercalate "\n" (map show branches) <> "\n}"
+      "{\n" <> List.intercalate "\n" (map show branches) <> "\n}"
     LaHandleIn name handler body -> 
       "handle " <> name <> " " <> show handler <> "\n" <> show body
     LaPerform opName args name  -> 
-      "perform " <> opName <> showArgs args <> " to " <> show name
+      "perform " <> opName <> "(" <> List.intercalate ", " (map show args) <> ") at " <> show name
+    where
+      parens s = "(" <> s <> ")"
 
 -- | Ветка паттерн-матчинга.
 data LaBranch = LaBranch LaPattern LaExpr
@@ -94,5 +94,5 @@ data LaOp = LaOp LaOpName [LaName] LaExpr
   deriving stock Eq
 
 instance Show LaOp where
-  show (LaOp opName params body) = 
-    "op " <> opName <> "(" <> List.intercalate ", " params <> ")" <> " " <> show body
+  show (LaOp name params body) = 
+    "op " <> name <> "(" <> List.intercalate ", " params <> ")" <> " " <> show body
