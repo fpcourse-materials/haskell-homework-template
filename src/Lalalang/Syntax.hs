@@ -34,7 +34,7 @@ data LaExpr
   | LaNew LaCtorName [LaExpr]
   | LaMatch LaExpr [LaBranch]
   | LaHandleIn LaName LaHandler LaExpr
-  | LaPerform LaOpName [LaExpr] LaName
+  | LaPerform LaOpName [LaExpr]
   deriving stock Eq
 
 instance Show LaExpr where
@@ -53,8 +53,8 @@ instance Show LaExpr where
       "{\n" <> List.intercalate "\n" (map show branches) <> "\n}"
     LaHandleIn name handler body -> 
       "handle " <> name <> " " <> show handler <> "\n" <> show body
-    LaPerform opName args name  -> 
-      "perform " <> opName <> "(" <> List.intercalate ", " (map show args) <> ") at " <> show name
+    LaPerform name args -> 
+      "perform " <> name <> "(" <> List.intercalate ", " (map show args) <> ")"
     where
       parens s = "(" <> s <> ")"
 
