@@ -1,5 +1,6 @@
 module Test.Utils where
 
+import Control.DeepSeq
 import Control.Exception
 import Test.HUnit (assertFailure)
 
@@ -12,8 +13,8 @@ instance Show (a -> b) where
 instance (Enum a, Bounded a, Eq b) => Eq (a -> b) where
   xs == ys = map xs domain == map ys domain
 
-assertThrows :: forall exception a . (Show a, Exception exception) => a -> IO ()
-assertThrows comp = try (evaluate comp) >>= \case
+assertThrows :: forall exception a . (Show a, NFData a, Exception exception) => a -> IO ()
+assertThrows comp = try (evaluate (force comp)) >>= \case
   Left e -> case fromException @exception e of
     Just _ -> pure ()
     Nothing -> throw e

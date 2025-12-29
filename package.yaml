@@ -42,6 +42,7 @@ default-extensions:
   - FunctionalDependencies
   - GADTs
   - GeneralizedNewtypeDeriving
+  - ImplicitParams
   - ImportQualifiedPost
   - InstanceSigs
   - KindSignatures
@@ -122,3 +123,4 @@ tests:
       - quickcheck-classes-base
       - generic-arbitrary
       - generic-random
+      - deepseq
