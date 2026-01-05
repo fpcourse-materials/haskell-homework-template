@@ -1,5 +1,6 @@
 module Test.Prelude
-  ( module Data.Coerce
+  ( module Control.DeepSeq
+  , module Data.Coerce
   , module Data.Proxy
   , module Test.HUnit
   , module Test.Lazy
@@ -12,6 +13,7 @@ module Test.Prelude
   , module MetaUtils
   ) where
 
+import Control.DeepSeq
 import Data.Coerce (Coercible)
 import Data.Proxy
 import Test.HUnit (Test (..), assertFailure, assertEqual, assertBool)
