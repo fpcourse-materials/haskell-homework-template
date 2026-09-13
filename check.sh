@@ -1,6 +1,5 @@
 #!/usr/bin/env sh
 set -e
-hlint .
-stack clean
-stack build --test --no-run-tests # magic to increase a probability of success
-stack test --ghc-options="-Werror $2" --ta "$1 $(cat solved-tasks.txt)"
+hlint src test
+cabal build all
+cabal test homework-test --test-show-details=direct --test-options="$1 $(cat solved-tasks.txt)"

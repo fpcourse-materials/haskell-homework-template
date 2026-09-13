@@ -3,11 +3,9 @@
 
 ### Haskell ###
 
-# Hard to merge homeworks after changing configuration in the template.
-homework.cabal
-
 dist
 dist-*
+dist-newstyle/
 cabal-dev
 *.o
 *.hi

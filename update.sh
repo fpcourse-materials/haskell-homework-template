@@ -28,7 +28,7 @@ git push origin main:main # To have main as a default branch on github (first pu
 git config pull.rebase false
 
 git checkout solutions
-sh check.sh "" "-Wunused-imports -Wredundant-constraints"
+sh check.sh ""
 if [ "$1" = "" ]
 then
   git commit -am "[no ci] Update" --allow-empty

@@ -1,7 +1,6 @@
 module Test.Properties (propertyToTest, propertyToTestIO, lawsToTest, filterLaws) where
 
 import Control.Exception
-import Data.List.NonEmpty qualified as NE
 import Test.HUnit (Test (..), assertFailure)
 import Test.QuickCheck (Arbitrary (..))
 import Test.QuickCheck qualified as QC
@@ -36,6 +35,3 @@ deriving newtype instance Arbitrary a => Arbitrary (Id a)
 deriving newtype instance Arbitrary (f a) => Arbitrary (Done f a)
 deriving newtype instance Arbitrary (f a) => Arbitrary (Todo f a)
 deriving newtype instance Arbitrary (f a) => Arbitrary (Dispatcher l f a)
-
-instance Arbitrary a => Arbitrary (NE.NonEmpty a) where
-  arbitrary = NE.fromList . QC.getNonEmpty <$> arbitrary
