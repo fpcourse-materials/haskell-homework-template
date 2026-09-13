@@ -1,11 +1,11 @@
 cabal-version: 3.0
 name:          homework
 version:       0.1.0.0
-license:       BSD-3-Clause
+license:       MIT
 license-file:  LICENSE
 author:        Andrey Stoyan
 maintainer:    andrey.stoyan.csam@gmail.com
-copyright:     2024 Andrey Stoyan
+copyright:     2024-2026 Andrey Stoyan
 build-type:    Simple
 description:   Please see the README on GitHub at <https://github.com/fpcourse-materials/haskell-homework-template#readme>
 
