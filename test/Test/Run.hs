@@ -40,9 +40,9 @@ testMain :: NamedTests -> IO ()
 testMain tests = do
   testFilters <- getTestFilters
   strict <- isJust <$> lookupEnv "HASKELL_TEST_STRICT"
-  manifest <- fromMaybe (Manifest []) <$> readManifest "TASKS"
+  manifest <- fromMaybe emptyManifest <$> readManifest "TASKS"
   -- Опечатка в TASKS дала бы задачу, которая вечно TODO, и уровень 1 никогда бы не закрылся.
-  let unknown = filter (`notElem` map fst tests) $ map snd $ manifestTasks manifest
+  let unknown = filter (`notElem` map fst tests) $ manifestTasks manifest
   unless (null unknown) do
     putStrLn $ "TASKS mentions tasks that have no tests: " <> unwords unknown
     exitFailure
@@ -52,8 +52,8 @@ testMain tests = do
   lookupEnv "HASKELL_TEST_REPORT" >>= maybe (pure ()) \filePath ->
     appendFile filePath $ showMachine report
   let taskReport = collectTaskReport manifest report
-      closed = level1Closed manifest $ statusOf taskReport
-      missing = level1Missing manifest $ statusOf taskReport
+      closed = level1Closed manifest (map taskId taskReport) $ statusOf taskReport
+      missing = level1Missing manifest (map taskId taskReport) $ statusOf taskReport
   lookupEnv "HASKELL_TEST_REPORT_JSON" >>= maybe (pure ()) \filePath ->
     writeFile filePath $ showJson taskReport closed
   putStrLn $ "\n" <> showCounts counts <> "\n"
@@ -71,11 +71,13 @@ testMain tests = do
     statusOf :: TaskReport -> TaskId -> TaskStatus
     statusOf taskReport name = maybe TaskTodo taskStatus $ List.find ((== name) . taskId) taskReport
 
+-- | Нумерует тесты уровня: @nameTests 2@ даёт задачи @2.1@, @2.2@, …
+-- Первое число идентификатора — уровень задачи, см. "Test.Manifest".
 nameTests :: Int -> [Test] -> NamedTests
-nameTests iBlock = map wrapToTestLabel . zipWith mkNamedTest [1 :: Int ..]
+nameTests iLevel = map wrapToTestLabel . zipWith mkNamedTest [1 :: Int ..]
   where
     wrapToTestLabel (label, test) = (label, TestLabel label test)
-    mkNamedTest iTask test = (show iBlock <> "." <> show iTask, test)
+    mkNamedTest iTask test = (show iLevel <> "." <> show iTask, test)
 
 -- | Статус по счётчикам HUnit и числу проверок, упёршихся в заглушку.
 statusFromCounts :: Counts -> Int -> TestStatus
@@ -111,20 +113,20 @@ showMachine = List.intercalate "\n" . map showResult
       TestTodo -> "TODO"
 
 -- | Задачи манифеста в его порядке (незапущенные получают 'TaskTodo'),
--- затем запущенные тесты, которых в манифесте нет (без уровня).
+-- затем запущенные тесты, которых в манифесте нет. Уровень — из идентификатора.
 collectTaskReport :: Manifest -> TestReport -> TaskReport
 collectTaskReport manifest report = map fromManifest (manifestTasks manifest) ++ map fromRun unlisted
   where
-    fromManifest (level, name) = TaskResult
+    fromManifest name = TaskResult
       { taskId = name
-      , taskLevel = Just level
+      , taskLevel = levelOfTask name
       , taskStatus = maybe TaskTodo (taskStatusFromTest . testStatus) $
           List.find ((== name) . testName) report
       }
-    unlisted = filter (\TestResult {..} -> testName `notElem` map snd (manifestTasks manifest)) report
+    unlisted = filter (\TestResult {..} -> testName `notElem` manifestTasks manifest) report
     fromRun TestResult {..} = TaskResult
       { taskId = testName
-      , taskLevel = Nothing
+      , taskLevel = levelOfTask testName
       , taskStatus = taskStatusFromTest testStatus
       }
 

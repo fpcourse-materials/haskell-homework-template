@@ -81,9 +81,9 @@ library
   import: shared
   hs-source-dirs: src
   exposed-modules:
-    Block1
-    Block2
-    Block3
+    Level1
+    Level2
+    Level3
   build-depends:
     meta-utils
 
@@ -162,9 +162,9 @@ test-suite homework-test
   hs-source-dirs: test
   main-is: Spec.hs
   other-modules:
-    SpecBlock1
-    SpecBlock2
-    SpecBlock3
+    SpecLevel1
+    SpecLevel2
+    SpecLevel3
     Test.Lambda
     Test.Lazy
     Test.Manifest

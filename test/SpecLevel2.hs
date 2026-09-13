@@ -1,6 +1,6 @@
-module SpecBlock2 where
+module SpecLevel2 where
 
---import Block2
+--import Level2
 import Test.Prelude
 
 tests :: NamedTests
