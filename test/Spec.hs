@@ -4,8 +4,8 @@ import SpecBlock3 qualified
 import Test.Lambda (lambdaTests)
 import Test.Prelude
 
--- | Задачи λ-домашки (если в корне есть hw.lam) и задачи блоков на Haskell.
+-- | Задачи λ-домашки (если есть src/hw.lam) и задачи блоков на Haskell.
 main :: IO ()
 main = do
-  lambda <- lambdaTests ["hw.lam"]
+  lambda <- lambdaTests ["src/hw.lam"]
   testMain $ lambda ++ SpecBlock1.tests ++ SpecBlock2.tests ++ SpecBlock3.tests

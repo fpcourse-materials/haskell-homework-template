@@ -109,8 +109,7 @@ test-suite meta-utils-test
     , HUnit
 
 -- Проверялка λ-домашек (hw01–hw03): библиотека для автотестов и REPL.
--- Исходники — копия tools/lambda из репозитория проверялки (станет git subtree);
--- своя секция без общих расширений, чтобы код собирался как в исходном пакете.
+-- Проверялка живёт и развивается здесь; своя секция без общих расширений шаблона.
 library lambda-checker
   default-language: Haskell2010
   hs-source-dirs: meta-utils/lambda/src
@@ -133,7 +132,7 @@ library lambda-checker
     , filepath >= 1.4 && < 2
     , megaparsec >= 9.2 && < 10
 
--- REPL проверялки: cabal run lambda -- load hw.lam
+-- REPL проверялки: cabal run lambda -- load src/hw.lam
 executable lambda
   default-language: Haskell2010
   hs-source-dirs: meta-utils/lambda/app

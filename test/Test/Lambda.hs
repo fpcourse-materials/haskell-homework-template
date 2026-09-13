@@ -4,7 +4,7 @@
 -- (имя = идентификатор задачи, как в @TASKS@ и @solved-tasks.txt@),
 -- а каждая её проверка — отдельным @TestCase@. Так частично решённая
 -- задача получает статус PARTIAL средствами обычного раннера.
--- Файлы, которых нет, пропускаются: в Haskell-домашках @hw.lam@ отсутствует.
+-- Файлы, которых нет, пропускаются: в Haskell-домашках @src/hw.lam@ отсутствует.
 module Test.Lambda (lambdaTests) where
 
 import Control.Exception (throwIO, ErrorCall (..))

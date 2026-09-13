@@ -106,15 +106,15 @@ jobs:
       - name: 'Update package index'
         run: cabal update
 
-      - name: 'Build all'
-        run: cabal build all --enable-tests
+      - name: 'Build'
+        run: cabal build homework-test
 
       - name: 'Run tests'
         id: run-tests
         continue-on-error: true
         env:
           HASKELL_TEST_REPORT_JSON: report.json
-        run: cabal test homework-test --test-show-details=direct --test-options="$(cat solved-tasks.txt)"
+        run: cabal test homework-test --test-options="$(cat solved-tasks.txt)"
 
       - name: 'Complete report.json'
         env:
@@ -132,15 +132,8 @@ jobs:
             tmp*|"[no ci] tmp"*) KIND=tmp ;;
             *) KIND=other ;;
           esac
-          HOURS=null
-          if [ -f hours.txt ]; then
-            VALUE=$(tr -d '[:space:]' < hours.txt | tr ',' '.')
-            if echo "$VALUE" | grep -Eq '^[0-9]+(\.[0-9]+)?$'; then
-              HOURS=$VALUE
-            fi
-          fi
-          jq --arg hw "$HW" --arg login "$LOGIN" --arg sha "$SHA" --arg kind "$KIND" --argjson hours "$HOURS" \
-            '. + {hw: $hw, login: $login, sha: $sha, kind: $kind, hours: $hours}' \
+          jq --arg hw "$HW" --arg login "$LOGIN" --arg sha "$SHA" --arg kind "$KIND" \
+            '. + {hw: $hw, login: $login, sha: $sha, kind: $kind}' \
             report.json > report.tmp.json
           mv report.tmp.json report.json
           cat report.json

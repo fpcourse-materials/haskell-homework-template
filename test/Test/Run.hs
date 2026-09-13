@@ -1,6 +1,6 @@
 module Test.Run (NamedTests, testMain, nameTests) where
 
-import Control.Monad (forM)
+import Control.Monad (forM, unless)
 import Data.List qualified as List
 import Data.Maybe (fromMaybe)
 import System.Environment (lookupEnv, getArgs)
@@ -33,6 +33,11 @@ testMain :: NamedTests -> IO ()
 testMain tests = do
   testFilters <- getTestFilters
   manifest <- fromMaybe (Manifest []) <$> readManifest "TASKS"
+  -- Опечатка в TASKS дала бы задачу, которая вечно TODO, и уровень 1 никогда бы не закрылся.
+  let unknown = filter (`notElem` map fst tests) $ map snd $ manifestTasks manifest
+  unless (null unknown) do
+    putStrLn $ "TASKS mentions tasks that have no tests: " <> unwords unknown
+    exitFailure
   putStrLn $ "Executing: " <>
     if null testFilters then "all tests" else List.intercalate ", " testFilters
   (counts, report) <- runTests $ filterTests testFilters tests
