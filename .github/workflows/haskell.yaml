@@ -121,18 +121,13 @@ jobs:
           HW: ${{ github.event.repository.name }}
           LOGIN: ${{ github.actor }}
           SHA: ${{ github.sha }}
-          MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           # The test runner did not even start (build of tests failed, etc.): keep the shape.
           if [ ! -f report.json ]; then
             echo '{"tasks":[],"level1_closed":false}' > report.json
           fi
-          case "$MESSAGE" in
-            submit:*) KIND=submit ;;
-            *) KIND=other ;;
-          esac
-          jq --arg hw "$HW" --arg login "$LOGIN" --arg sha "$SHA" --arg kind "$KIND" \
-            '. + {hw: $hw, login: $login, sha: $sha, kind: $kind}' \
+          jq --arg hw "$HW" --arg login "$LOGIN" --arg sha "$SHA" \
+            '. + {hw: $hw, login: $login, sha: $sha}' \
             report.json > report.tmp.json
           mv report.tmp.json report.json
           cat report.json

@@ -3,7 +3,7 @@
 # make build                  собрать проект
 # make check                  линтер и тесты всех задач; код выхода — закрыт ли уровень 1
 # make check ONLY="1.1 1.2"   то же, но только для перечисленных задач
-# make submit [MSG="…"]       сборка, коммит «submit: …» и пуш — версия к ревью
+# make submit [MSG="…"]       сборка, проверка для сведения, коммит и пуш
 # make release MSG="…"        для преподавателей: обновить решения и опубликовать шаблон
 
 ONLY ?=
@@ -29,11 +29,12 @@ check:
 	-$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test
 
-# Сдавать можно и с открытым уровнем 1: проверка запускается для сведения, блокирует только несобирающийся код.
+# Любой пуш в main — текущая версия домашки: её проверяет CI и её же смотрит ревью.
+# Проверка запускается для сведения, блокирует только несобирающийся код.
 submit: build
 	-$(MAKE) --no-print-directory check
 	git add -A
-	git commit -m "$(strip submit: $(MSG))" --allow-empty
+	git commit -m "$(or $(MSG),Сдача)" --allow-empty
 	git push origin main
 	@echo "Отчёт CI появится в вашем pull request."
 
