@@ -129,7 +129,6 @@ jobs:
           fi
           case "$MESSAGE" in
             submit:*) KIND=submit ;;
-            tmp*|"[no ci] tmp"*) KIND=tmp ;;
             *) KIND=other ;;
           esac
           jq --arg hw "$HW" --arg login "$LOGIN" --arg sha "$SHA" --arg kind "$KIND" \

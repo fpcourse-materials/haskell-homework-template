@@ -4,16 +4,15 @@
 # make check                  линтер и тесты всех задач; код выхода — закрыт ли уровень 1
 # make check ONLY="1.1 1.2"   то же, но только для перечисленных задач
 # make submit [MSG="…"]       сборка, коммит «submit: …» и пуш — версия к ревью
-# make tmp                    коммит «[no ci] tmp» и пуш без прогона CI
 # make release MSG="…"        для преподавателей: обновить решения и опубликовать шаблон
 
 ONLY ?=
 MSG ?=
 
-.PHONY: help build lint test check submit tmp release
+.PHONY: help build lint test check submit release
 
 help:
-	@sed -n '3,8p' Makefile | sed 's/^# //'
+	@sed -n '3,7p' Makefile | sed 's/^# //'
 
 # Собирает только то, что нужно для проверки: библиотеку и тесты домашки.
 build:
@@ -37,12 +36,6 @@ submit: build
 	git commit -m "$(strip submit: $(MSG))" --allow-empty
 	git push origin main
 	@echo "Отчёт CI появится в вашем pull request."
-
-tmp:
-	git add -A
-	git commit -m "[no ci] tmp" --allow-empty
-	git push origin main
-	@echo "Не забудьте сдать версию через make submit."
 
 # Для преподавателей. Ожидает remote origin (репозиторий домашки), remote template
 # (внутренний шаблон) и remote public (шаблон в организации студентов); ветка solutions — эталон.
