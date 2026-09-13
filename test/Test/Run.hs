@@ -2,7 +2,7 @@ module Test.Run (NamedTests, testMain, nameTests) where
 
 import Control.Monad (forM, unless)
 import Data.List qualified as List
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import System.Environment (lookupEnv, getArgs)
 import System.Exit (exitFailure, exitSuccess)
 import Test.HUnit (Test (..), Counts (..))
@@ -10,7 +10,10 @@ import Test.HUnit.Base qualified as HU
 import Test.Manifest
 
 type NamedTests = [(String, Test)]
-data TestStatus = TestPassed | TestPartial Float | TestFailed deriving Eq
+
+-- | 'TestTodo' — каждая проверка упёрлась в заглушку @todo@ или дырку:
+-- к задаче не приступали, и это не то же самое, что 'TestFailed'.
+data TestStatus = TestPassed | TestPartial Float | TestFailed | TestTodo deriving Eq
 data TestResult = TestResult { testName :: String, testStatus :: TestStatus }
 type TestReport = [TestResult]
 
@@ -29,9 +32,14 @@ instance Semigroup Counts where
 instance Monoid Counts where
   mempty = Counts 0 0 0 0
 
+-- | Запускает все тесты (или только перечисленные в аргументах), печатает отчёт
+-- и пишет его в файлы из @HASKELL_TEST_REPORT@ / @HASKELL_TEST_REPORT_JSON@.
+-- Код выхода — закрыт ли уровень 1 (так же красится CI);
+-- с @HASKELL_TEST_STRICT@ — все ли задачи DONE (проверка ветки с решениями).
 testMain :: NamedTests -> IO ()
 testMain tests = do
   testFilters <- getTestFilters
+  strict <- isJust <$> lookupEnv "HASKELL_TEST_STRICT"
   manifest <- fromMaybe (Manifest []) <$> readManifest "TASKS"
   -- Опечатка в TASKS дала бы задачу, которая вечно TODO, и уровень 1 никогда бы не закрылся.
   let unknown = filter (`notElem` map fst tests) $ map snd $ manifestTasks manifest
@@ -51,7 +59,8 @@ testMain tests = do
   putStrLn $ "\n" <> showCounts counts <> "\n"
   putStr $ showTaskReport taskReport
   putStrLn $ "Level 1: " <> if closed then "closed" else "open (missing: " <> unwords missing <> ")"
-  if statusFromCounts counts == TestPassed then exitSuccess else exitFailure
+  let allDone = all ((== TaskDone) . taskStatus) taskReport
+  if (if strict then allDone else closed) then exitSuccess else exitFailure
   where
     getTestFilters :: IO [String]
     getTestFilters = concatMap words <$> getArgs
@@ -68,9 +77,11 @@ nameTests iBlock = map wrapToTestLabel . zipWith mkNamedTest [1 :: Int ..]
     wrapToTestLabel (label, test) = (label, TestLabel label test)
     mkNamedTest iTask test = (show iBlock <> "." <> show iTask, test)
 
-statusFromCounts :: Counts -> TestStatus
-statusFromCounts Counts {..}
+-- | Статус по счётчикам HUnit и числу проверок, упёршихся в заглушку.
+statusFromCounts :: Counts -> Int -> TestStatus
+statusFromCounts Counts {..} todos
   | errors == 0 && failures == 0 = TestPassed
+  | todos == tried = TestTodo
   | errors + failures < tried = TestPartial $
       1 - fromIntegral (errors + failures) / fromIntegral tried
   | otherwise = TestFailed
@@ -80,6 +91,7 @@ taskStatusFromTest = \case
   TestPassed -> TaskDone
   TestPartial percent -> TaskPartial percent
   TestFailed -> TaskFailed
+  TestTodo -> TaskTodo
 
 showCounts :: Counts -> String
 showCounts Counts {..} = concat
@@ -96,6 +108,7 @@ showMachine = List.intercalate "\n" . map showResult
       TestPassed -> "DONE"
       TestPartial percent -> "PARTIAL " <> show percent
       TestFailed -> "FAILED"
+      TestTodo -> "TODO"
 
 -- | Задачи манифеста в его порядке (незапущенные получают 'TaskTodo'),
 -- затем запущенные тесты, которых в манифесте нет (без уровня).
@@ -160,24 +173,27 @@ showJson taskReport closed = jsonObject
 runTests :: NamedTests -> IO (Counts, TestReport)
 runTests tests = collectReport <$> forM tests \(name, test) -> do
   putStrLn $ "Running test \"" <> name <> "\":"
-  (counts, _) <- HU.performTest reportStart reportError reportFailure () test
-  let result = TestResult { testName = name, testStatus = statusFromCounts counts }
-  reportSummary counts
+  -- Состояние прогона — число проверок, упёршихся в заглушку или дырку.
+  (counts, todos) <- HU.performTest reportStart reportError reportFailure (0 :: Int) test
+  let status = statusFromCounts counts todos
+      result = TestResult { testName = name, testStatus = status }
+  reportSummary status
   pure (counts, result)
   where
-    reportStart _ _ = pure () -- per test case
-    reportError loc msg =
-      -- Hack to distinguish not implemented cases
-      let isTodo = "Not implemented" `List.isSubsequenceOf` msg in
-      let prefix = if isTodo then "[TODO] " else "[ERROR] " in
-      reportProblem prefix loc msg
-    reportFailure = reportProblem "[FAILURE] "
-    reportProblem prefix _ msg HU.State{..} () = putStr $ padLines 4 $
+    reportStart _ todos = pure todos -- per test case
+    reportError loc msg state todos = do
+      -- 'TodoException' показывается как "Not implemented: …"
+      let isTodo = "Not implemented" `List.isInfixOf` msg
+      reportProblem (if isTodo then "[TODO] " else "[ERROR] ") loc msg state
+      pure $ if isTodo then todos + 1 else todos
+    reportFailure loc msg state todos = todos <$ reportProblem "[FAILURE] " loc msg state
+    reportProblem prefix _ msg HU.State{..} = putStr $ padLines 4 $
       prefix <> showPath path <> " " <> msg <> if '\n' `elem` msg then "\n" else ""
-    reportSummary counts = putStr $ padLines 4 $ case statusFromCounts counts of
+    reportSummary status = putStr $ padLines 4 $ case status of
       TestPassed -> "Done :)"
       TestPartial percent -> "In progress, " <> show (floor $ percent * 100) <> "% tests remain :|"
       TestFailed -> "Nothing here :("
+      TestTodo -> "Not started yet"
 
 padLines :: Int -> String -> String
 padLines nSpaces = unlines . map (replicate nSpaces ' ' ++) . lines

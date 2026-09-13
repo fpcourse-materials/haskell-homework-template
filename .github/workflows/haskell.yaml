@@ -114,7 +114,7 @@ jobs:
         continue-on-error: true
         env:
           HASKELL_TEST_REPORT_JSON: report.json
-        run: cabal test homework-test --test-options="$(cat solved-tasks.txt)"
+        run: cabal test homework-test
 
       - name: 'Complete report.json'
         env:
@@ -140,16 +140,23 @@ jobs:
 
       - name: 'Render report'
         run: |
-          {
-            echo '| Task | Level | Status |'
-            echo '|------|-------|--------|'
-            jq -r '.tasks[] | "| \(.id) | \(.level // "-") | \(.status)\(if .progress != null then " (\(.progress * 100 | floor)%)" else "" end) |"' report.json
-            echo
-            jq -r 'if .level1_closed then "**Level 1: closed**" else "**Level 1: open**"  end' report.json
-          } > report.md
+          jq -r '
+            def rep(s; n): [range(n)] | map(s) | join("");
+            def icon: {"DONE": "✅", "PARTIAL": "🟡", "FAILED": "❌", "TODO": "⬜"}[.] // "❔";
+            def progress: if .progress != null then " (\(.progress * 100 | floor)%)" else "" end;
+            (.tasks | group_by(.level // 99) | .[]
+              | { level: .[0].level, done: map(select(.status == "DONE")) | length, total: length }
+              | "- **\(if .level == null then "Вне TASKS" else "Уровень \(.level)" end)**: \(.done) из \(.total) `\(rep("█"; .done))\(rep("░"; .total - .done))`"),
+            "",
+            "| Задача | Уровень | Статус |",
+            "|---|---|---|",
+            (.tasks[] | "| \(.id) | \(.level // "-") | \(.status | icon) \(.status)\(progress) |"),
+            "",
+            (if .level1_closed then "**Уровень 1 закрыт** — домашка сдана." else "**Уровень 1 открыт.**" end)
+          ' report.json > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           {
-            echo '## Homework report'
+            echo '## Отчёт проверки'
             echo
             cat report.md
             echo
@@ -170,8 +177,9 @@ jobs:
           header: hw-report
           path: comment.md
 
+      # Job зелёная, только когда уровень 1 закрыт: код выхода раннера — именно это.
       - name: 'Propagate test result'
         if: steps.run-tests.outcome == 'failure'
         run: |
-          echo 'Some tests failed, see the report above.'
+          echo 'Level 1 is still open, see the report above.'
           exit 1

@@ -1,14 +1,14 @@
 # Единая точка входа домашки. `make` без цели печатает список целей.
 #
 # make build                  собрать проект
-# make check                  линтер и тесты задач из solved-tasks.txt
+# make check                  линтер и тесты всех задач; код выхода — закрыт ли уровень 1
 # make check ONLY="1.1 1.2"   то же, но только для перечисленных задач
-# make submit                 локальная проверка, коммит «submit: …» и пуш — версия к ревью
+# make submit [MSG="…"]       сборка, коммит «submit: …» и пуш — версия к ревью
 # make tmp                    коммит «[no ci] tmp» и пуш без прогона CI
 # make release MSG="…"        для преподавателей: обновить решения и опубликовать шаблон
 
 ONLY ?=
-SOLVED = $(shell cat solved-tasks.txt)
+MSG ?=
 
 .PHONY: help build lint test check submit tmp release
 
@@ -24,15 +24,17 @@ lint:
 	hlint src test
 
 test:
-	cabal test homework-test --test-options="$(ONLY) $(SOLVED)"
+	cabal test homework-test --test-options="$(ONLY)"
 
 check:
 	-$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test
 
-submit: check
+# Сдавать можно и с открытым уровнем 1: проверка запускается для сведения, блокирует только несобирающийся код.
+submit: build
+	-$(MAKE) --no-print-directory check
 	git add -A
-	git commit -m "submit: $(ONLY) $(SOLVED)" --allow-empty
+	git commit -m "$(strip submit: $(MSG))" --allow-empty
 	git push origin main
 	@echo "Отчёт CI появится в вашем pull request."
 
@@ -49,7 +51,7 @@ release:
 	git config pull.rebase false
 	git checkout solutions
 	hlint src test
-	$(MAKE) --no-print-directory test
+	HASKELL_TEST_STRICT=1 $(MAKE) --no-print-directory test
 	git commit -am "[no ci] $(or $(MSG),Update)" --allow-empty
 	git pull template main --no-edit
 	git push origin solutions:solutions

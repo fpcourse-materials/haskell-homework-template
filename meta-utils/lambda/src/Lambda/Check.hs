@@ -17,11 +17,12 @@ module Lambda.Check
   , prettyResults
   , reportOk
   , inhabitable
+  , isHoleMessage
   ) where
 
 import Control.Exception (IOException, try)
 import Data.Char (isSpace)
-import Data.List (intercalate, nub, sort, (\\))
+import Data.List (intercalate, isSuffixOf, nub, sort, (\\))
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import System.FilePath (takeDirectory, (</>), (<.>), takeExtension)
 
@@ -230,6 +231,12 @@ holeMsg n = "в ‘" ++ n ++ "’ осталась дырка (...)"
 
 answerHole :: String
 answerHole = "ответ не дан (...)"
+
+-- | Проверка упёрлась в дырку: к ней ещё не приступали, это не ошибка.
+-- Все сообщения о дырках заканчиваются на @(...)@; раннер шаблона по этому
+-- признаку отличает статус TODO от FAILED.
+isHoleMessage :: String -> Bool
+isHoleMessage = ("(...)" `isSuffixOf`)
 
 -- | Names the expression depends on that still contain holes, or have
 -- definition problems.
