@@ -12,7 +12,7 @@ license:       MIT
 author:        Andrey Stoyan
 build-type:    Simple
 data-files:
-  samples/*.lam
+  tutorial.lam
   test/data/*.lam
 
 common warnings
@@ -55,7 +55,10 @@ test-suite lambda-test
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            Test.hs
+  default-extensions: ImportQualifiedPost
   build-depends:
     base,
     directory,
+    HUnit,
+    QuickCheck,
     lambda-engine

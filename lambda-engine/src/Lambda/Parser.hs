@@ -21,7 +21,7 @@ module Lambda.Parser
   ) where
 
 import Control.Monad (void, when)
-import Data.Char (isAlphaNum, isLetter)
+import Data.Char (isAlphaNum, isDigit, isLetter)
 import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -130,10 +130,14 @@ pMinimal pos = do
   (raw, expr) <- match pExpr
   return (SMinimal pos name expr raw)
 
+-- | @name := term@, the practice's «обозначим». A plain @=@ is the
+-- most likely slip, so it gets its own message.
 pDef :: SrcPos -> Parser Stmt
 pDef pos = do
   name <- ident
-  _    <- symbol "="
+  op   <- symbol ":=" <|> symbol "="
+  when (op == "=") $
+    fail ("a definition is written with ‘:=’: " ++ name ++ " := …")
   SDef pos name <$> pExpr
 
 -- | An unanswered @type@ is written @...@ and parsed as the type
@@ -189,9 +193,15 @@ pChain pos = do
       ]
 
     -- A chain line: indentation, optional arrow, expression, end of line.
-    chainLine isFirst = try $ do
-      skipBlankLines
-      _ <- some (char ' ' <|> char '\t')
+    -- Only the indentation (and, after the first line, the sight of an
+    -- arrow) is backtracked; from there on a mistake inside the line
+    -- is reported where it is, not as "expected a statement".
+    chainLine isFirst = do
+      _ <- try $ do
+        skipBlankLines
+        indent <- some (char ' ' <|> char '\t')
+        if isFirst then return () else void (lookAhead (char '~' <|> char '='))
+        return indent
       arrow <- if isFirst then return Nothing else Just <$> pArrow
       expr  <- pChainExpr
       endLine
@@ -201,16 +211,32 @@ pChain pos = do
 
     skipBlankLines = void $ many (try (sc *> eol))
 
+-- | @~b~>@, @~s~>@, @~~>@, @=a=@, or @~NAME~>@ for unfolding a definition
+-- (the lecture's ⇝ with the name as subscript). @b@ and @s@ are taken by
+-- the first two arrows, see 'arrowNames'.
 pArrow :: Parser Arrow
 pArrow = lexeme $ choice
-  [ ArrBeta  <$ try (string "~b~>")
-  , ArrDelta <$ try (string "~d~>")
-  , ArrSubst <$ try (string "~s~>")
-  , ArrMany  <$ try (string "~~>")
+  [ ArrMany  <$ try (string "~~>")
   , ArrAlpha <$ try (string "=a=")
+  , try named <?> "arrow (~b~>, ~NAME~>, =a=, ~~>, ~s~>)"
   ]
+  where
+    named = do
+      _ <- char '~'
+      first <- satisfy identChar
+      rest <- many (satisfy identChar)
+      _ <- string "~>"
+      let name = first : rest
+      case name of
+        "b" -> return ArrBeta
+        "s" -> return ArrSubst
+        _ | all isDigit name ->
+              fail ("‘~" ++ name ++ "~>’: numerals are already unfolded, no step is needed")
+          | identStart first -> return (ArrDelta name)
+          | otherwise -> fail ("‘~" ++ name ++ "~>’ is not an arrow")
 
--- | @[x := N, y := M] body@ — simultaneous substitution.
+-- | @[x |-> N, y |-> M] body@ — simultaneous substitution (the
+-- practice's @[x ↦ N] M@).
 pSubst :: Parser Expr
 pSubst = do
   _ <- symbol "["
@@ -220,7 +246,9 @@ pSubst = do
   where
     pBind = do
       x <- ident
-      _ <- symbol ":="
+      op <- symbol "|->" <|> symbol ":="
+      when (op == ":=") $
+        fail "a substitution is written [x |-> N] M; ‘:=’ is for definitions"
       n <- pExpr
       return (x, n)
 

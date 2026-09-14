@@ -50,6 +50,8 @@ module Lambda
   , betaPaths
   , contractBeta
   , unfoldings
+  , namedUnfoldings
+  , unfoldingsOf
   , reachable
   , Verdict (..)
   , betaEq

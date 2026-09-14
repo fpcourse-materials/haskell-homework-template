@@ -45,7 +45,7 @@ prettyAnn focus prec expr = case expr of
   Lit n  -> (show n, Nothing)
   Hole _ -> ("...", Nothing)
   Subst bs m ->
-    let binds = [ x ++ " := " ++ fst (prettyAnn Nothing 0 n) | (x, n) <- bs ]
+    let binds = [ x ++ " |-> " ++ fst (prettyAnn Nothing 0 n) | (x, n) <- bs ]
         (ms, _) = prettyAnn Nothing 1 m
     in  applyWrap 1 prec ("[" ++ joinWith ", " binds ++ "] " ++ ms) Nothing
   App f a ->

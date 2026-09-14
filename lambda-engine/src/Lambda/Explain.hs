@@ -213,7 +213,7 @@ holeLine pal =
   withCode (palMuted pal) (palReset pal) "hole" ++ "  ..."
 
 defLine :: Name -> Expr -> String
-defLine name rhs = name ++ " = " ++ prettyExpr rhs
+defLine name rhs = name ++ " := " ++ prettyExpr rhs
 
 renderPiece :: Palette -> ExplainView -> TreePiece -> String
 renderPiece _ _ (TreePlain s) = s

@@ -40,7 +40,10 @@ testMain :: NamedTests -> IO ()
 testMain tests = do
   testFilters <- getTestFilters
   strict <- isJust <$> lookupEnv "HASKELL_TEST_STRICT"
-  manifest <- fromMaybe emptyManifest <$> readManifest "TASKS"
+  -- @HASKELL_TASKS@ подменяет манифест; несуществующий путь даёт пустой манифест
+  -- (так `make check FILE=…` проверяет файл, к которому TASKS не относится).
+  manifestPath <- fromMaybe "TASKS" <$> lookupEnv "HASKELL_TASKS"
+  manifest <- fromMaybe emptyManifest <$> readManifest manifestPath
   -- Опечатка в TASKS дала бы задачу, которая вечно TODO, и уровень 1 никогда бы не закрылся.
   let unknown = filter (`notElem` map fst tests) $ manifestTasks manifest
   unless (null unknown) do

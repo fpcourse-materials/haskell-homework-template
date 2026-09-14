@@ -22,7 +22,8 @@ import Lambda.Command
   , replHelp
   , runLine
   )
-import Lambda.Eval (Ctx)
+import Lambda.Eval (Ctx (..))
+import Lambda.Syntax (Language (..))
 
 main :: IO ()
 main = do
@@ -38,7 +39,21 @@ data Action
   | ActionCheck FilePath
   | ActionLoad LoadArgs
 
-data LoadArgs = LoadArgs FilePath [String] ColorMode
+-- | @lambda load@: an optional file, @-e@ commands, color, and the
+-- language of a session started without a file.
+data LoadArgs = LoadArgs
+  { loadFile     :: Maybe FilePath
+  , loadEvals    :: [String]
+  , loadColor    :: ColorMode
+  , loadLanguage :: Maybe Language
+  }
+
+-- | What the REPL runs on: the context and, if there is one, the file
+-- @:reload@ re-reads.
+data Repl = Repl
+  { replFile :: Maybe FilePath
+  , replCtx  :: Ctx
+  }
 
 parseArgs :: [String] -> Either String Action
 parseArgs [] = Left (usage ++ "\nlambda: missing command")
@@ -57,37 +72,45 @@ parseCheck [] = Left "lambda check: missing FILE"
 parseCheck _ = Left "lambda check: too many arguments"
 
 parseLoad :: [String] -> Either String Action
-parseLoad = go [] ColorAuto Nothing
+parseLoad = go (LoadArgs Nothing [] ColorAuto Nothing)
   where
-    go evals color file [] =
-      case file of
-        Nothing -> Left "lambda load: missing FILE"
-        Just f  -> Right (ActionLoad (LoadArgs f evals color))
-    go _ _ _ ["-h"] = Right ActionHelp
-    go _ _ _ ["--help"] = Right ActionHelp
-    go evals color file (flag : rest)
+    go args [] =
+      case (loadFile args, loadLanguage args) of
+        (Just _, Just _) -> Left "lambda load: --language is only for a session without FILE (the file names its own language)"
+        _ -> Right (ActionLoad args)
+    go args (flag : rest)
       | flag == "-h" || flag == "--help" = Right ActionHelp
-      | flag == "--no-color" = go evals ColorNever file rest
+      | flag == "--no-color" = go args { loadColor = ColorNever } rest
       | flag == "-e" || flag == "--eval" = case rest of
-          (cmd : rest') -> go (evals ++ [cmd]) color file rest'
+          (cmd : rest') -> go (addEval cmd args) rest'
           []            -> Left "lambda load: -e needs a command"
-      | "--eval=" `isPrefixOf` flag =
-          go (evals ++ [drop 7 flag]) color file rest
-      | "--color=" `isPrefixOf` flag =
-          setColor evals file rest (drop 8 flag)
+      | "--eval=" `isPrefixOf` flag = go (addEval (drop 7 flag) args) rest
+      | "--color=" `isPrefixOf` flag = setColor args rest (drop 8 flag)
       | flag == "--color" = case rest of
-          (when_ : rest') -> setColor evals file rest' when_
+          (when_ : rest') -> setColor args rest' when_
           []              -> Left "lambda load: --color needs auto|always|never"
+      | "--language=" `isPrefixOf` flag = setLanguage args rest (drop 11 flag)
+      | flag == "--language" = case rest of
+          (lang : rest') -> setLanguage args rest' lang
+          []             -> Left "lambda load: --language needs pure|typed"
       | "-" `isPrefixOf` flag =
           Left ("lambda load: unknown option ‘" ++ flag ++ "’")
-      | otherwise = case file of
+      | otherwise = case loadFile args of
           Just _  -> Left "lambda load: too many arguments"
-          Nothing -> go evals color (Just flag) rest
+          Nothing -> go args { loadFile = Just flag } rest
 
-    setColor evals file rest when_ =
+    addEval cmd args = args { loadEvals = loadEvals args ++ [cmd] }
+
+    setColor args rest when_ =
       case parseColorMode when_ of
-        Just c  -> go evals c file rest
+        Just c  -> go args { loadColor = c } rest
         Nothing -> Left "lambda load: --color needs auto|always|never"
+
+    setLanguage args rest lang =
+      case lang of
+        "pure"  -> go args { loadLanguage = Just Pure } rest
+        "typed" -> go args { loadLanguage = Just Typed } rest
+        _       -> Left "lambda load: --language needs pure|typed"
 
 runCheck :: FilePath -> IO ()
 runCheck file = do
@@ -111,20 +134,36 @@ colorStatuses pal text = intercalate "\n" (map paintLine (lines text))
       | otherwise = l
 
 runLoad :: LoadArgs -> IO ()
-runLoad (LoadArgs path evals colorMode) = do
-  pal <- detectPalette colorMode
-  loaded <- loadSession path
-  case loaded of
+runLoad args = do
+  pal <- detectPalette (loadColor args)
+  started <- case loadFile args of
+    Just path -> fmap (fmap fromSession) (loadSession path)
+    Nothing -> return (Right (emptySession (fromMaybe Pure (loadLanguage args))))
+  case started of
     Left err -> do
       hPutStr stderr (withCode (palError pal) (palReset pal) (stripNL err))
       hPutStrLn stderr ""
       exitFailure
-    Right sess ->
-      case evals of
+    Right st ->
+      case loadEvals args of
         [] -> do
-          putStrLn ("Loaded " ++ sessionFile sess)
-          repl sess pal
-        cmds -> runEvals sess pal cmds
+          putStrLn (greeting st)
+          repl st pal
+        cmds -> runEvals st pal cmds
+
+fromSession :: Session -> Repl
+fromSession sess = Repl (Just (sessionFile sess)) (sessionCtx sess)
+
+-- | A session without a file: no definitions, the given language.
+emptySession :: Language -> Repl
+emptySession lang = Repl Nothing (Ctx [] (lang == Typed))
+
+greeting :: Repl -> String
+greeting st = case replFile st of
+  Just path -> "Loaded " ++ path
+  Nothing ->
+    "Empty session, language " ++ (if ctxTyped (replCtx st) then "typed" else "pure")
+      ++ ". Define names with ‘name := term’; :help lists the commands."
 
 stripNL :: String -> String
 stripNL = reverse . dropWhile (== '\n') . reverse
@@ -133,19 +172,25 @@ stripNL = reverse . dropWhile (== '\n') . reverse
 -- replaces the old one (definitions made at the prompt are dropped);
 -- on failure the error is printed and 'Nothing' returned, so the
 -- caller can keep working with the old context.
-reload :: Session -> Palette -> IO (Maybe Ctx)
-reload sess pal = do
-  loaded <- loadSession (sessionFile sess)
-  case loaded of
-    Left err -> do
-      hPutStrLn stderr (withCode (palError pal) (palReset pal) (stripNL err))
-      return Nothing
-    Right sess' -> do
-      putStrLn ("Loaded " ++ sessionFile sess')
-      return (Just (sessionCtx sess'))
+reload :: Repl -> Palette -> IO (Maybe Ctx)
+reload st pal = case replFile st of
+  Nothing -> do
+    complain "error: nothing to reload: the session was started without a file"
+    return Nothing
+  Just path -> do
+    loaded <- loadSession path
+    case loaded of
+      Left err -> do
+        complain (stripNL err)
+        return Nothing
+      Right sess -> do
+        putStrLn ("Loaded " ++ sessionFile sess)
+        return (Just (sessionCtx sess))
+  where
+    complain msg = hPutStrLn stderr (withCode (palError pal) (palReset pal) msg)
 
-runEvals :: Session -> Palette -> [String] -> IO ()
-runEvals sess pal = go (sessionCtx sess)
+runEvals :: Repl -> Palette -> [String] -> IO ()
+runEvals st pal = go (replCtx st)
   where
     go _ [] = return ()
     go ctx (cmd : rest) = do
@@ -157,14 +202,14 @@ runEvals sess pal = go (sessionCtx sess)
           hPutStrLn stderr shown
           exitFailure
         CommandReload -> do
-          fresh <- reload sess pal
+          fresh <- reload st pal
           maybe exitFailure (`go` rest) fresh
         _ -> do
           putStrLn shown
           go ctx' rest
 
-repl :: Session -> Palette -> IO ()
-repl sess pal = runInputT settings (loop (sessionCtx sess))
+repl :: Repl -> Palette -> IO ()
+repl st pal = runInputT settings (loop (replCtx st))
   where
     -- Filename completion would steal Tab; arrows and history still work.
     -- The prompt is uncolored so Haskeline's cursor width stays correct.
@@ -188,7 +233,7 @@ repl sess pal = runInputT settings (loop (sessionCtx sess))
                       liftIO (hPutStrLn stderr shown)
                       loop ctx
                     CommandReload -> do
-                      fresh <- liftIO (reload sess pal)
+                      fresh <- liftIO (reload st pal)
                       loop (fromMaybe ctx fresh)
                     _ -> do
                       liftIO (putStrLn shown)
@@ -201,13 +246,15 @@ usage :: String
 usage = unlines
   [ "Usage:"
   , "  lambda check FILE"
-  , "  lambda load [OPTIONS] FILE"
+  , "  lambda load [OPTIONS] [FILE]"
   , ""
   , "check  Run every task of a .lam file and print DONE / PARTIAL / FAILED."
   , "load   Load the definitions of a .lam file and start a REPL."
+  , "       Without FILE: an empty session (no definitions, :reload unavailable)."
   , ""
   , "load options:"
   , "  -e CMD, --eval CMD   run a REPL command and exit (repeatable)"
+  , "  --language LANG      pure (default) or typed; only without FILE"
   , "  --color WHEN         auto (default), always, or never"
   , "  --no-color           same as --color=never"
   , ""

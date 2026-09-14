@@ -36,6 +36,8 @@ module Lambda.Eval
   , betaPaths
   , contractBeta
   , unfoldings
+  , namedUnfoldings
+  , unfoldingsOf
   , reachable
     -- * Comparison and shapes
   , Verdict (..)
@@ -79,10 +81,12 @@ data EvalError
   = TooManySteps
   deriving (Eq, Show)
 
+-- | What kind of redex a step contracts; δ and π carry the name that
+-- was unfolded or computed, so traces can print @~K~>@ / @~plus~>@.
 data RedexKind
   = Beta
-  | Delta
-  | Prim
+  | Delta Name
+  | Prim Name
   deriving (Eq, Show)
 
 data Step
@@ -231,8 +235,8 @@ insertAt _ _ e = e
 redexKind :: Ctx -> Path -> Expr -> RedexKind
 redexKind ctx path e =
   case focused path e of
-    Just (Var x) | any ((== x) . fst) (ctxEnv ctx) -> Delta
-    Just sub | ctxTyped ctx, Just _ <- primStep sub -> Prim
+    Just (Var x) | any ((== x) . fst) (ctxEnv ctx) -> Delta x
+    Just sub | ctxTyped ctx, Just _ <- primStep sub, (Var p, _) <- spine sub -> Prim p
     _ -> Beta
 
 -- | One step, whichever is next for the strategy.
@@ -280,16 +284,23 @@ betaPaths e = case e of
   _ -> []
 
 -- | Every term obtained by unfolding one free occurrence of one
--- environment name.
-unfoldings :: Ctx -> Expr -> [Expr]
-unfoldings ctx = go []
+-- environment name, tagged with that name.
+namedUnfoldings :: Ctx -> Expr -> [(Name, Expr)]
+namedUnfoldings ctx = go []
   where
     go bound (Var x)
-      | inEnv ctx bound x, Just def <- lookup x (ctxEnv ctx) = [def]
+      | inEnv ctx bound x, Just def <- lookup x (ctxEnv ctx) = [(x, def)]
       | otherwise = []
-    go bound (Lam x t b) = [Lam x t b' | b' <- go (x : bound) b]
-    go bound (App f a) = [App f' a | f' <- go bound f] ++ [App f a' | a' <- go bound a]
+    go bound (Lam x t b) = [(n, Lam x t b') | (n, b') <- go (x : bound) b]
+    go bound (App f a) = [(n, App f' a) | (n, f') <- go bound f] ++ [(n, App f a') | (n, a') <- go bound a]
     go _ _ = []
+
+unfoldings :: Ctx -> Expr -> [Expr]
+unfoldings ctx = map snd . namedUnfoldings ctx
+
+-- | Unfoldings of one particular name (@~K~>@ in a chain).
+unfoldingsOf :: Ctx -> Name -> Expr -> [Expr]
+unfoldingsOf ctx name = map snd . filter ((== name) . fst) . namedUnfoldings ctx
 
 -- | Terms reachable in at most @k@ β/δ steps (any redex), α-deduplicated.
 -- The frontier is capped so pathological terms do not explode.

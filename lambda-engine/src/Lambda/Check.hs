@@ -176,8 +176,9 @@ collectDefs lang vars imported stmts = foldl step (imported, []) [ (p, n, e) | S
           selfRef = [ prettyPos pos ++ ": ‘" ++ name ++ "’ ссылается на себя (рекурсия не допускается)" | name `elem` unknown ]
           unknown' = unknown \\ [name]
           undefMsg = [ prettyPos pos ++ ": в ‘" ++ name ++ "’ не определено: " ++ unwords unknown' | not (null unknown') ]
-          substMsg = [ prettyPos pos ++ ": подстановка [x := N] M допустима только первой строкой chain" | hasSubst expr ]
-          msgs = dup ++ selfRef ++ undefMsg ++ substMsg
+          substMsg = [ prettyPos pos ++ ": подстановка [x |-> N] M допустима только первой строкой chain" | hasSubst expr ]
+          arrowMsg = [ prettyPos pos ++ ": имя ‘" ++ name ++ "’ занято стрелкой ~" ++ name ++ "~>" | name `elem` arrowNames ]
+          msgs = dup ++ selfRef ++ undefMsg ++ substMsg ++ arrowMsg
           env' = if name `elem` map fst env then env else env ++ [(name, expr)]
       in  (env', problems ++ [ (name, m) | m <- msgs ])
 
@@ -194,7 +195,7 @@ checkLoaded ld = map runTask (sections (ldStmts ld))
   where
     ctx = ctxOf ld
     runTask (tid, title, stmts) =
-      let defs = [ n | SDef _ n _ <- stmts ]
+      let defs = nub [ n | SDef _ n _ <- stmts ]
           problems = [ CheckResult ("определение " ++ n) (Left m)
                      | n <- defs, (n', m) <- ldProblems ld, n == n' ]
           checks = concatMap (runStmt ld ctx) stmts
@@ -437,19 +438,24 @@ checkChain ld ctx label _ opts ls@((_, firstTerm) : restLines) =
           let result = substAll bs m
           in  if alphaEq (erase result) (erase cur) then Right ()
               else Left ("подстановка даёт " ++ prettyExpr result ++ ", а не " ++ prettyExpr cur)
-        _ -> Left "~s~> допустима только после строки вида [x := N] M"
+        _ -> Left "~s~> допустима только после строки вида [x |-> N] M"
       ArrAlpha ->
         if alphaEq (erase prev) (erase cur) || (isStrategy && alphaEq (erase (expand prev)) (erase (expand cur)))
           then Right ()
           else Left ("строки " ++ show (i - 1) ++ " и " ++ show i ++ " не α-эквивалентны")
-      ArrDelta ->
-        if isStrategy
-          then if alphaEq (erase (expand prev)) (erase (expand cur)) then Right ()
-               else Left ("после раскрытия имён строки " ++ show (i - 1) ++ " и " ++ show i ++ " различаются")
-          else if any (alphaEq cur) (unfoldings ctx prev) || any (alphaEq prev) (unfoldings ctx cur)
-            then Right ()
-            else Left ("строка " ++ show i ++ " не получается из строки " ++ show (i - 1)
-                       ++ " раскрытием одного имени" ++ hint (unfoldings ctx prev))
+      ArrDelta name
+        | name `notElem` map fst env ->
+            Left ("‘" ++ name ++ "’ не определено" ++ legacyDelta name)
+        | any (alphaEq cur) (unfoldingsOf ctx name prev) || any (alphaEq prev) (unfoldingsOf ctx name cur) ->
+            Right ()
+        | otherwise ->
+            case nub (unfoldedNames prev cur ++ unfoldedNames cur prev) of
+              (other : _) ->
+                Left ("строка " ++ show i ++ " получается из строки " ++ show (i - 1)
+                      ++ " раскрытием ‘" ++ other ++ "’, а не ‘" ++ name ++ "’")
+              [] ->
+                Left ("строка " ++ show i ++ " не получается из строки " ++ show (i - 1)
+                      ++ " раскрытием одного вхождения ‘" ++ name ++ "’" ++ hint (unfoldingsOf ctx name prev))
       ArrMany ->
         if isStrategy then Left "~~> нельзя использовать в цепочке со стратегией"
         else if any (alphaEq cur) (reachable ctx (chainSteps opts) prev) then Right ()
@@ -460,7 +466,7 @@ checkChain ld ctx label _ opts ls@((_, firstTerm) : restLines) =
           let options = [ contractBeta p prev | p <- betaPaths prev ]
           in  if any (alphaEq cur) options then Right ()
               else if any (alphaEq (expand cur)) [ contractBeta p (expand prev) | p <- betaPaths (expand prev) ]
-                then Left "шаг верен только после раскрытия имени: сначала раскройте его отдельной строкой ~d~>"
+                then Left "шаг верен только после раскрытия имени: сначала раскройте его отдельной строкой ~имя~>"
                 else Left ("строка " ++ show i ++ " не получается из строки " ++ show (i - 1)
                            ++ " одним β-шагом" ++ hint options)
         Just s ->
@@ -478,6 +484,13 @@ checkChain ld ctx label _ opts ls@((_, firstTerm) : restLines) =
     isStrategy = isJust strategy
     stratName ChainNormal = "normal"
     stratName ChainApplicative = "applicative"
+
+    -- Names whose single unfolding turns @from@ into @to@.
+    unfoldedNames from to = [ n | (n, e) <- namedUnfoldings ctx from, alphaEq e to ]
+
+    -- The v2 draft wrote every unfolding as ~d~>; point old files at the new form.
+    legacyDelta "d" = "; раскрытие имени пишется с самим именем: ~K~>, ~S~>, …"
+    legacyDelta _ = ""
 
     hint [] = ""
     hint options = "; возможные шаги: " ++ intercalate " | " (map prettyExpr (take 3 options))

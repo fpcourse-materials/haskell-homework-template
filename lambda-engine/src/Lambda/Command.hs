@@ -13,7 +13,8 @@ module Lambda.Command
 import Control.Applicative ((<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit, isSpace)
 import Data.List (intercalate)
-import Text.Megaparsec (takeWhile1P, try)
+import Control.Monad (when)
+import Text.Megaparsec (lookAhead, takeWhile1P, try)
 
 import Lambda.Color (Palette (..), paint, withCode)
 import Lambda.Decode (prettyDecoded)
@@ -21,7 +22,7 @@ import Lambda.Eval
 import Lambda.Explain (ExplainView, explain, renderExplain)
 import Lambda.Parser (Parser, ident, pAtom, pExpr, parseWith, sc, symbol, desugarNumerals)
 import Lambda.Pretty (prettyCaret, prettyExpr, prettyFocus, prettyTypeGreek, prettyTypeGreek2)
-import Lambda.Subst (alphaEq, expandAll, hasHole, unboundIn)
+import Lambda.Subst (alphaEq, expandAll, hasHole, namesUsedBy, unboundIn)
 import Lambda.Syntax
 import Lambda.Types (inferType, prettyTypeError, primTypes)
 
@@ -60,12 +61,12 @@ replHelp = unlines
   , "  mult 2 3"
   , ""
   , "A definition is stored as written (later lines can use the name):"
-  , "  K = \\x y. x"
-  , "  twice = \\f x. f (f x)"
+  , "  K := \\x y. x"
+  , "  twice := \\f x. f (f x)"
   , ""
   , "Commands:"
   , "  :nf [STRATEGY] <term>       reduce to normal form"
-  , "  :step [STRATEGY] <term>     one reduction step (β, δ or primitive)"
+  , "  :step [STRATEGY] <term>     one step: β, unfolding of a name, or a primitive"
   , "  :follow [STRATEGY] <term>   every step to normal form"
   , "  :explain <term>             structure, binders, free names"
   , "  :type <term>                most general simple type (Curry)"
@@ -78,8 +79,8 @@ replHelp = unlines
   , ""
   , "STRATEGY = normal (default; leftmost-outermost), strict (call-by-value),"
   , "           applicative (leftmost-innermost)"
-  , "δ = unfold a name from the environment (one name at a time)"
-  , ":follow / :step mark β as ~b~> and δ as ~d~>"
+  , "Names from the file are unfolded one at a time, only when they are the next redex."
+  , ":follow / :step mark a β-step as ~b~> and the unfolding of K as ~K~>"
   , "For :eq-a, parenthesize compound terms: :eq-a twice (\\f x. f (f x))"
   ]
 
@@ -91,13 +92,17 @@ parseCommand = parseWith "<repl>" pCommand
 pCommand :: Parser ReplCmd
 pCommand =
       (symbol ":" *> pColonBody)
-  <|> try pBind
+  <|> pBind
   <|> (CmdNf Lazy <$> pExpr)
 
+-- | @name := term@. Only the look-ahead is backtracked, so a line
+-- written with @=@ fails with a hint instead of being read as a term.
 pBind :: Parser ReplCmd
 pBind = do
-  name <- ident
-  _    <- symbol "="
+  name <- try (ident <* lookAhead (symbol ":=" <|> symbol "="))
+  op   <- symbol ":=" <|> symbol "="
+  when (op == "=") $
+    fail ("a definition is written with ‘:=’: " ++ name ++ " := …")
   CmdBind name <$> pExpr
 
 pColonBody :: Parser ReplCmd
@@ -262,14 +267,17 @@ setBind ((n, e) : rest) name expr
   | n == name = (name, expr) : rest
   | otherwise = (n, e) : setBind rest name expr
 
--- | Do not unfold names. A hole in the term, or a name whose stored
--- definition contains a hole, is an error.
+-- | Do not unfold names. A hole in the term, or a name the term depends
+-- on (directly or through other definitions) whose definition contains
+-- a hole, is an error.
 resolve :: Ctx -> Expr -> Either String Expr
 resolve ctx expr
   | hasHole expr = Left "error: term contains a hole"
-  | Var name <- expr, Just def <- lookup name (ctxEnv ctx), hasHole def =
+  | (name : _) <- [ n | n <- namesUsedBy env expr, Just def <- [lookup n env], hasHole def ] =
       Left ("error: hole in ‘" ++ name ++ "’")
   | otherwise = Right expr
+  where
+    env = ctxEnv ctx
 
 rejectHole :: Expr -> Either String Expr
 rejectHole e
@@ -300,7 +308,7 @@ renderResult pal result = case result of
   CommandEq False ->
     withCode (palFalse pal) (palReset pal) "False"
   CommandDef name expr ->
-    name ++ " = " ++ prettyExpr expr
+    name ++ " := " ++ prettyExpr expr
   CommandEnv binds -> renderEnv pal binds
   CommandStep step -> renderStep pal step
   CommandFollow steps -> renderFollow pal steps
@@ -311,7 +319,7 @@ renderEnv pal [] =
   withCode (palMuted pal) (palReset pal) "(no bindings)"
 renderEnv _ binds =
   intercalate "\n"
-    [ name ++ " = " ++ prettyExpr expr
+    [ name ++ " := " ++ prettyExpr expr
     | (name, expr) <- binds
     ]
 
@@ -325,17 +333,21 @@ highlightRedex pal kind path expr =
         else paint code (palReset pal) span_ term
 
 kindColor :: Palette -> RedexKind -> String
-kindColor pal Beta  = palBeta pal
-kindColor pal Delta = palDelta pal
-kindColor pal Prim  = palDelta pal
+kindColor pal Beta      = palBeta pal
+kindColor pal (Delta _) = palDelta pal
+kindColor pal (Prim _)  = palDelta pal
 
+-- | The arrow of a chain line: @~b~>@ for β, @~K~>@ for unfolding @K@,
+-- @~plus~>@ for a primitive.
 arrowText :: RedexKind -> String
-arrowText Beta  = "~b~>"
-arrowText Delta = "~d~>"
-arrowText Prim  = "~p~>"
+arrowText Beta      = "~b~>"
+arrowText (Delta n) = "~" ++ n ++ "~>"
+arrowText (Prim n)  = "~" ++ n ++ "~>"
 
-arrowPad :: String
-arrowPad = replicate (length "~b~> ") ' '
+-- | Blank space as wide as the arrow plus its trailing space, to keep a
+-- caret line under the term it marks.
+arrowPad :: RedexKind -> String
+arrowPad kind = replicate (length (arrowText kind) + 1) ' '
 
 renderArrow :: Palette -> RedexKind -> String
 renderArrow pal kind =
@@ -349,7 +361,7 @@ renderStep pal (Stepped kind path before after) =
       arrow = renderArrow pal kind
   in  shown ++ "\n" ++ arrow ++ " " ++ prettyExpr after
 
--- | A reduction trace: highlight each redex, then @~b~>@ / @~d~>@ the next term.
+-- | A reduction trace: highlight each redex, then @~b~>@ / @~K~>@ the next term.
 renderFollow :: Palette -> [Step] -> String
 renderFollow pal steps = case steps of
   [] -> ""
@@ -367,11 +379,9 @@ renderFollow pal steps = case steps of
 
     prefix Nothing shown = shown
     prefix (Just kind) shown =
-      prefixArrow (renderArrow pal kind ++ " ") shown
-
-    prefixArrow arrow shown =
-      case break (== '\n') shown of
-        (term, '\n' : caret) ->
-          arrow ++ term ++ "\n" ++ arrowPad ++ caret
-        (term, _) ->
-          arrow ++ term
+      let arrow = renderArrow pal kind ++ " "
+      in  case break (== '\n') shown of
+            (term, '\n' : caret) ->
+              arrow ++ term ++ "\n" ++ arrowPad kind ++ caret
+            (term, _) ->
+              arrow ++ term

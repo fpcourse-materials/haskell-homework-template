@@ -79,8 +79,11 @@ common shared
 
 library
   import: shared
-  hs-source-dirs: src
+  -- Repl стоит первым: cabal repl открывает первый exposed-модуль, а Repl
+  -- импортирует все уровни, так что `make repl` видит их сразу.
+  hs-source-dirs: src meta-utils/repl
   exposed-modules:
+    Repl
     Level1
     Level2
     Level3

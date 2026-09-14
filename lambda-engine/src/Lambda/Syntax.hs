@@ -8,6 +8,7 @@ module Lambda.Syntax
   , Expr (..)
   , Language (..)
   , Arrow (..)
+  , arrowNames
   , ChainOpts (..)
   , defaultChainOpts
   , ChainStrategy (..)
@@ -51,7 +52,7 @@ data Type
 -- @Lit n@ is an integer constant (in @pure@ files the parser turns digits
 -- into Church numerals instead, so 'Lit' appears only in @typed@ files).
 -- @Subst [(x, n), ...] m@ is the meta-level simultaneous substitution
--- @[x := n, ...] m@; it is only allowed as the first line of a chain.
+-- @[x |-> n, ...] m@; it is only allowed as the first line of a chain.
 data Expr
   = Var Name
   | Lam Name (Maybe Type) Expr
@@ -72,12 +73,16 @@ data Language = Pure | Typed
 
 -- | Arrows between chain lines.
 data Arrow
-  = ArrBeta      -- ^ @~b~>@ one β-step
-  | ArrDelta     -- ^ @~d~>@ one name unfolded (or folded)
-  | ArrAlpha     -- ^ @=a=@ α-renaming
-  | ArrMany      -- ^ @~~>@ at most k steps
-  | ArrSubst     -- ^ @~s~>@ substitution performed
+  = ArrBeta        -- ^ @~b~>@ one β-step
+  | ArrDelta Name  -- ^ @~K~>@ one occurrence of the name @K@ unfolded (or folded)
+  | ArrAlpha       -- ^ @=a=@ α-renaming
+  | ArrMany        -- ^ @~~>@ at most k steps
+  | ArrSubst       -- ^ @~s~>@ substitution performed
   deriving (Eq, Show)
+
+-- | Names that cannot be defined because @~b~>@ and @~s~>@ are arrows.
+arrowNames :: [Name]
+arrowNames = ["b", "s"]
 
 data ChainStrategy = ChainNormal | ChainApplicative
   deriving (Eq, Show)
