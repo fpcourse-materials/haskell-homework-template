@@ -12,6 +12,15 @@ description:   Please see the README on GitHub at <https://github.com/fpcourse-m
 extra-doc-files:
   README.md
 
+-- Вид домашки. Haskell (по умолчанию): задачи в src/Level*.hs, тесты в test/SpecLevel*.hs.
+-- λ-исчисление (+lambda): задачи в src/hw.lam, Haskell-уровней нет — библиотека homework
+-- не собирается, а тесты берут только src/hw.lam. Флаг включается в variant.project,
+-- который шаблон не трогает, поэтому `git pull template main` проходит без конфликтов.
+flag lambda
+  description: Домашка по λ-исчислению (src/hw.lam) без Haskell-уровней
+  default:     False
+  manual:      True
+
 common shared
   default-language: Haskell2010
   build-depends:
@@ -89,6 +98,8 @@ library
     Level3
   build-depends:
     meta-utils
+  if flag(lambda)
+    buildable: False
 
 library meta-utils
   import: shared
@@ -119,9 +130,6 @@ test-suite homework-test
   hs-source-dirs: test
   main-is: Spec.hs
   other-modules:
-    SpecLevel1
-    SpecLevel2
-    SpecLevel3
     Test.Lambda
     Test.Lazy
     Test.Manifest
@@ -129,6 +137,16 @@ test-suite homework-test
     Test.Properties
     Test.Run
     Test.Utils
+  -- Spec.hs подключает Haskell-уровни под #ifndef LAMBDA (см. флаг lambda выше).
+  if flag(lambda)
+    cpp-options: -DLAMBDA
+  else
+    other-modules:
+      SpecLevel1
+      SpecLevel2
+      SpecLevel3
+    build-depends:
+      homework
   ghc-options:
     -threaded
     -rtsopts
@@ -137,7 +155,6 @@ test-suite homework-test
     -Wno-type-defaults
   build-depends:
     , meta-utils
-    , homework
     , lambda-engine
     , directory
     , HUnit

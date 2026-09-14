@@ -34,8 +34,13 @@ repl:
 	fi
 
 # Подсказки линтера не влияют на статус задач, но их видит ревью; `make check` показывает их каждый раз.
+# В λ-домашке кода на Haskell у студента нет, и линтер не запускается — ставить hlint не нужно.
 lint:
-	hlint src test
+	@if [ -f src/hw.lam ]; then \
+	  echo "λ-домашка: линтер Haskell не запускается"; \
+	else \
+	  hlint src test; \
+	fi
 
 # С FILE раннер проверяет указанный .lam-файл вместо src/hw.lam; манифест TASKS
 # к нему не относится, поэтому отключается (HASKELL_TASKS указывает на несуществующий файл).
@@ -64,14 +69,14 @@ release:
 	git push origin main:main
 	git config pull.rebase false
 	git checkout solutions
-	hlint src test
+	$(MAKE) --no-print-directory lint
 	HASKELL_TEST_STRICT=1 $(MAKE) --no-print-directory test
 	git commit -am "[no ci] $(or $(MSG),Update)" --allow-empty
 	git pull template main --no-edit
 	git push origin solutions:solutions
 	git checkout main
 	git merge solutions -m "[no ci] Merged with solutions"
-	hlint src test
+	$(MAKE) --no-print-directory lint
 	cabal build all --ghc-options=-Werror
 	git push origin main:main
 	git push public main:main
