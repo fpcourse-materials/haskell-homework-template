@@ -2,6 +2,7 @@ module Main (main) where
 
 import Control.Monad.IO.Class (liftIO)
 import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
+import Data.Maybe (fromMaybe)
 import System.Console.Haskeline
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
@@ -21,6 +22,7 @@ import Lambda.Command
   , replHelp
   , runLine
   )
+import Lambda.Eval (Ctx)
 
 main :: IO ()
 main = do
@@ -127,6 +129,21 @@ runLoad (LoadArgs path evals colorMode) = do
 stripNL :: String -> String
 stripNL = reverse . dropWhile (== '\n') . reverse
 
+-- | @:reload@: re-read the session file. On success the fresh context
+-- replaces the old one (definitions made at the prompt are dropped);
+-- on failure the error is printed and 'Nothing' returned, so the
+-- caller can keep working with the old context.
+reload :: Session -> Palette -> IO (Maybe Ctx)
+reload sess pal = do
+  loaded <- loadSession (sessionFile sess)
+  case loaded of
+    Left err -> do
+      hPutStrLn stderr (withCode (palError pal) (palReset pal) (stripNL err))
+      return Nothing
+    Right sess' -> do
+      putStrLn ("Loaded " ++ sessionFile sess')
+      return (Just (sessionCtx sess'))
+
 runEvals :: Session -> Palette -> [String] -> IO ()
 runEvals sess pal = go (sessionCtx sess)
   where
@@ -139,6 +156,9 @@ runEvals sess pal = go (sessionCtx sess)
         CommandErr _ -> do
           hPutStrLn stderr shown
           exitFailure
+        CommandReload -> do
+          fresh <- reload sess pal
+          maybe exitFailure (`go` rest) fresh
         _ -> do
           putStrLn shown
           go ctx' rest
@@ -167,6 +187,9 @@ repl sess pal = runInputT settings (loop (sessionCtx sess))
                     CommandErr _ -> do
                       liftIO (hPutStrLn stderr shown)
                       loop ctx
+                    CommandReload -> do
+                      fresh <- liftIO (reload sess pal)
+                      loop (fromMaybe ctx fresh)
                     _ -> do
                       liftIO (putStrLn shown)
                       loop ctx'

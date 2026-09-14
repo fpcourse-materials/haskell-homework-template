@@ -126,5 +126,5 @@ mult : Int -> Int -> Int`; `eq lt : Int -> Int -> Bool`; `iszero : Int -> Bool`;
   где `TaskResult` = идентификатор, заголовок и список именованных проверок с
   `Either String ()`. `Test/Lambda.hs` шаблона превращает это в HUnit-тесты.
 - CLI: `lambda check FILE` — та же таблица текстом; `lambda load FILE` — REPL
-  (`:nf`, `:step`, `:follow`, `:explain`, `:type`, `:env`), стратегии `normal`
+  (`:nf`, `:step`, `:follow`, `:explain`, `:type`, `:env`, `:reload`), стратегии `normal`
   (`lazy`), `strict`, `applicative`.

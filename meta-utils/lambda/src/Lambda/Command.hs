@@ -35,6 +35,7 @@ data ReplCmd
   | CmdDecode Expr
   | CmdEnv
   | CmdBind Name Expr
+  | CmdReload
   | CmdHelp
   | CmdQuit
   deriving (Eq, Show)
@@ -48,6 +49,7 @@ data CommandResult
   | CommandEnv [(Name, Expr)]
   | CommandDef Name Expr
   | CommandErr String
+  | CommandReload   -- ^ the driver re-reads the file and replaces the context
   | CommandQuit
   deriving (Eq, Show)
 
@@ -70,6 +72,7 @@ replHelp = unlines
   , "  :decode <term>              normal form printed as ⌜n⌝, true, ⟨a, b⟩, [..]"
   , "  :eq-a <term> <term>         alpha-equivalence (no reduction)"
   , "  :env                        list bindings in this session"
+  , "  :reload, :r                 re-read the file (drops definitions made here)"
   , "  :help                       this message"
   , "  :quit                       leave the REPL"
   , ""
@@ -111,6 +114,8 @@ pColonBody = do
     "decode"  -> CmdDecode <$> pExpr
     "eq-a"    -> CmdEqa <$> pCmdTerm <*> pCmdTerm
     "env"     -> return CmdEnv
+    "reload"  -> return CmdReload
+    "r"       -> return CmdReload
     "help"    -> return CmdHelp
     "h"       -> return CmdHelp
     "quit"    -> return CmdQuit
@@ -182,6 +187,7 @@ execCommand :: Ctx -> ReplCmd -> (Ctx, CommandResult)
 execCommand ctx CmdHelp =
   (ctx, CommandOut (stripTrailingNewline replHelp))
 execCommand ctx CmdQuit = (ctx, CommandQuit)
+execCommand ctx CmdReload = (ctx, CommandReload)
 execCommand ctx CmdEnv = (ctx, CommandEnv (ctxEnv ctx))
 execCommand ctx (CmdFollow strat expr) =
   case resolve ctx expr of
@@ -286,6 +292,7 @@ stripTrailingNewline s = reverse (dropWhile (== '\n') (reverse s))
 renderResult :: Palette -> CommandResult -> String
 renderResult pal result = case result of
   CommandQuit    -> ""
+  CommandReload  -> ""
   CommandErr err -> withCode (palError pal) (palReset pal) err
   CommandOut s   -> s
   CommandEq True ->

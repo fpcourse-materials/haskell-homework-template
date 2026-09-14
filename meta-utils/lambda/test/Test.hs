@@ -83,6 +83,9 @@ parseTests eq check = do
   eq "pretty annotation" "\\x:(a -> b) y:a. x y" (prettyExpr (mustParse "\\x:(a -> b) y:a. x y"))
   eq "type parse" (TArr (TArr (TVar "a") (TVar "b")) (TVar "a")) (either error id (parseType "(a -> b) -> a"))
   eq "type pretty" "(a -> b) -> a -> b" (prettyType (either error id (parseType "(a -> b) -> (a -> b)")))
+  eq ":reload" (Right CmdReload) (parseCommand ":reload")
+  eq ":r" (Right CmdReload) (parseCommand ":r")
+  eq ":r result" CommandReload (runInput (pureCtx []) ":r")
 
 ------------------------------------------------------------------------
 
