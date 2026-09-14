@@ -29,6 +29,10 @@ jobs:
 
       - name: 'Check the repository name'
         run: |
+          # В payload события push поля template_repository нет, спрашиваем API.
+          if [ -z "$TEMPLATE" ]; then
+            TEMPLATE=$(gh api "repos/$REPO" --jq '.template_repository.name // empty' 2>/dev/null || true)
+          fi
           if [ -n "$TEMPLATE" ] && [ "$REPO_NAME" != "$TEMPLATE-$ACTOR" ]; then
             echo "::warning::Репозиторий называется '$REPO_NAME', а по правилам курса должен называться '$TEMPLATE-<ваш логин>'."
           fi
@@ -163,11 +167,22 @@ jobs:
             echo '</details>'
           } > comment.md
 
+      # На событии push действие само PR не находит, поэтому номер ищем через API.
+      - name: 'Find the pull request'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head main --base feedback --state open --json number --jq '.[0].number // empty')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          if [ -z "$number" ]; then echo "pull request not found yet; the report stays in the job summary"; fi
+
       - name: 'Comment on the pull request'
-        if: github.event_name == 'push'
+        if: steps.pr.outputs.number != ''
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v2
         with:
+          number: ${{ steps.pr.outputs.number }}
           header: hw-report
           path: comment.md
 
