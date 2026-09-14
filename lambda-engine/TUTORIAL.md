@@ -8,7 +8,9 @@ REPL — это интерактивный интерпретатор: он чи
 make repl FILE=lambda-engine/tutorial.lam
 ```
 
-Это сокращение для `cabal run -v0 lambda -- load lambda-engine/tutorial.lam`; без `FILE` открывается `src/hw.lam`. REPL напечатает `Loaded lambda-engine/tutorial.lam` и приглашение `>`, после которого вводятся термы и команды. Выход: `:q` или Ctrl-D. Дальше каждая команда сначала показана, потом её вывод.
+REPL напечатает `Loaded lambda-engine/tutorial.lam` и приглашение `>`, после которого вводятся термы и команды. Выход: `:q` или Ctrl-D. Дальше каждая команда сначала показана, потом её вывод.
+
+Без `FILE` открывается `src/hw.lam`.
 
 ## 1. Синтаксис: дерево терма
 
