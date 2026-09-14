@@ -10,7 +10,7 @@ module Lambda.Command
   , replHelp
   ) where
 
-import Control.Applicative ((<|>))
+import Control.Applicative (empty, (<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit, isSpace)
 import Data.List (intercalate)
 import Control.Monad (when)
@@ -136,15 +136,12 @@ cmdName = do
   where
     isCmdChar c = c == '-' || c == '_' || isAsciiLower c || isAsciiUpper c || isDigit c
 
--- | An optional strategy word; defaults to normal order.
+-- | An optional strategy word; defaults to normal order. Any other word
+-- is left to the term parser (it may be a variable named @normal@).
 pStrategy :: Parser Strategy
-pStrategy = try named <|> return Lazy
+pStrategy = try strategyWord <|> return Lazy
   where
-    named = do
-      name <- ident
-      case parseStrategy name of
-        Just s  -> return s
-        Nothing -> fail ("unknown strategy ‘" ++ name ++ "’ (use normal, strict or applicative)")
+    strategyWord = ident >>= maybe empty return . parseStrategy
 
 -- | Atomic / parenthesized terms, so @:eq-a task1 (\\x. x)@ parses
 -- as two arguments rather than an application.
@@ -174,19 +171,25 @@ runLine ctx line =
 runInput :: Ctx -> String -> CommandResult
 runInput ctx line = snd (runLine ctx line)
 
--- | Megaparsec bundles are multi-line; keep the REPL error short.
+-- | Megaparsec bundles are multi-line (position, source excerpt, caret,
+-- then the messages); keep the REPL error to one line of messages.
 firstParseLine :: String -> String
 firstParseLine err =
   case filter isMsg (lines err) of
     [] -> "error: parse error"
-    ms -> "error: " ++ last ms
+    ms -> "error: " ++ intercalate "; " ms
   where
     isMsg l =
       let t = dropWhile isSpace l
       in  not (null t)
           && take 1 t /= "|"
+          && not (isExcerpt t)
           && take 6 t /= "<repl>"
           && not (all (\c -> isSpace c || c == '^') t)
+    -- The quoted source line: a line number, a space and a bar.
+    isExcerpt t = case span isDigit t of
+      (d, ' ' : '|' : _) -> not (null d)
+      _ -> False
 
 execCommand :: Ctx -> ReplCmd -> (Ctx, CommandResult)
 execCommand ctx CmdHelp =

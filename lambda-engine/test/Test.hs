@@ -121,6 +121,8 @@ parseTests = group "parse"
   , eq "pretty annotation" "\\x:(a -> b) y:a. x y" (prettyExpr (mustParse "\\x:(a -> b) y:a. x y"))
   , eq "type parse" (TArr (TArr (TVar "a") (TVar "b")) (TVar "a")) (either error id (parseType "(a -> b) -> a"))
   , eq "type pretty" "(a -> b) -> a -> b" (prettyType (either error id (parseType "(a -> b) -> (a -> b)")))
+  , ok "unknown type constant" (leftHas "unknown type constant ‘Nat’" (parseType "Nat -> a"))
+  , eq "type constants" (Right (TArr (TCon "Int") (TCon "Bool"))) (parseType "Int -> Bool")
   , eq ":reload" (Right CmdReload) (parseCommand ":reload")
   , eq ":r" (Right CmdReload) (parseCommand ":r")
   , eq ":r result" CommandReload (runInput (pureCtx []) ":r")
@@ -363,6 +365,8 @@ commandTests = group "command"
       [ eq "term to nf" "x" (out "K x y")
       , eq "numerals in terms" "\\s z. s (s (s z))" (out "suc 2")
       , eq ":nf with strategy" "x" (out ":nf strict K x (I y)")
+      , eq "strict evaluates a named argument first" "error: did not reach normal form (reduction limit)" (out ":nf strict K x omega")
+      , eq "normal order skips it" "x" (out "K x omega")
       , eq "unknown strategy word is read as a term" "foo x" (out ":nf foo x")
       , eq "reduction limit" "error: did not reach normal form (reduction limit)" (out "omega")
       , eq ":decode" "⌜3⌝" (out ":decode suc 2")
@@ -464,7 +468,7 @@ commandTests = group "command"
       [ eq ":eq-a true" "True" (out ":eq-a (\\x y. x) (\\a b. a)")
       , eq ":eq-a false" "False" (out ":eq-a (\\x. x y) (\\y. y y)")
       , eq ":eq-a does not unfold names" "False" (out ":eq-a K (\\a b. a)")
-      , ok ":eq-a needs parentheses" ("error: " `isPrefixOf` errOf ":eq-a \\x. x \\y. y")
+      , eq ":eq-a needs parentheses" "error: unexpected \"\\x.\"; expecting \"...\", '(', identifier, or integer" (errOf ":eq-a \\x. x \\y. y")
       , eq ":type" "K : α -> β -> α" (out ":type K")
       , eq ":type unfolds names" "twice : (α -> α) -> α -> α" (out ":type twice")
       , eq ":type error" "error: бесконечный тип: α ∼ α -> β" (out ":type omega")
@@ -697,8 +701,8 @@ errorFileTests = do
   errsLd <- dataFile "test/data/errors.lam" >>= loadFile
   typedBad <- dataFile "test/data/typed-bad.lam" >>= checkFile
   return $ group "error files"
-    [ group "errors.lam" $ withTasks errs $ \task status says ->
-        [ eq "task count" 21 (length' task)
+    [ group "errors.lam" $ withTasks errs $ \tasks task status says ->
+        [ eq "task count" 21 (length tasks)
         , eq "2.1 duplicate" Failed (status "2.1")
         , eq "2.1 duplicate reported once per definition" 2 (length (trChecks (task "2.1")))
         , says "2.1" "повторное определение ‘dup’"
@@ -756,7 +760,7 @@ errorFileTests = do
           [ eq "problem names" ["dup", "loop", "bad", "sub"] (map fst (ldProblems ld))
           , ok "duplicate keeps the first definition" (lookup "dup" (ldEnv ld) == Just (pure' "\\x. x"))
           ]
-    , group "typed-bad.lam" $ withTasks typedBad $ \_ status says ->
+    , group "typed-bad.lam" $ withTasks typedBad $ \_ _ status says ->
         [ eq "3.1 type" (Partial 1 6) (status "3.1")
         , says "3.1" "тип a -> a -> a верен, но не наиболее общий; наиболее общий: α -> β -> α"
         , says "3.1" "наиболее общий тип: α -> β -> α, а не a -> a"
@@ -781,8 +785,8 @@ errorFileTests = do
         ]
     ]
   where
-    -- Hand the task lookup, its status and a message check to the assertions,
-    -- or report the load error as the only test of the group.
+    -- Hand the tasks, a lookup by id, its status and a message check to the
+    -- assertions, or report the load error as the only test of the group.
     withTasks loaded body = case loaded of
       Left err -> [ok ("loads: " ++ err) False]
       Right tasks ->
@@ -790,8 +794,4 @@ errorFileTests = do
             status = taskStatus . task
             messages tid = [ m | CheckResult _ (Left m) <- trChecks (task tid) ]
             says tid s = ok (tid ++ " says " ++ s) (any (s `isInfixOf`) (messages tid))
-        in  body (withCount tasks task) status says
-    -- 'task' doubles as the task list carrier for the count assertion.
-    withCount tasks task tid = if tid == "" then countAs tasks else task tid
-    countAs tasks = TaskResult (show (length tasks)) "" []
-    length' task = read (trId (task "")) :: Int
+        in  body tasks task status says

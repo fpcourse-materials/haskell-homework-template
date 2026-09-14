@@ -9,6 +9,7 @@ module Lambda.Decode
 import Data.List (intercalate)
 
 import Lambda.Pretty (prettyExpr)
+import Lambda.Subst (freeVars)
 import Lambda.Syntax
 
 -- | A term with recognised sub-encodings printed readably. Falls back
@@ -66,21 +67,12 @@ list (Lam c _ (Lam n _ body)) | c /= n = go body
   where
     go (Var v) | v == n = Just []
     go (App (App (Var f) x) rest)
-      | f == c, c `notElem` freeNames x, n `notElem` freeNames x = (x :) <$> go rest
+      | f == c, c `notElem` freeVars x, n `notElem` freeVars x = (x :) <$> go rest
     go _ = Nothing
 list _ = Nothing
 
 -- | @\\p. p a b@ where @p@ is not used in @a@, @b@.
 pair :: Expr -> Maybe (Expr, Expr)
 pair (Lam p _ (App (App (Var q) a) b))
-  | p == q, p `notElem` freeNames a, p `notElem` freeNames b = Just (a, b)
+  | p == q, p `notElem` freeVars a, p `notElem` freeVars b = Just (a, b)
 pair _ = Nothing
-
-freeNames :: Expr -> [Name]
-freeNames = go []
-  where
-    go bound (Var x) = [x | x `notElem` bound]
-    go bound (Lam x _ b) = go (x : bound) b
-    go bound (App f a) = go bound f ++ go bound a
-    go bound (Subst bs m) = concatMap (go bound . snd) bs ++ go (map fst bs ++ bound) m
-    go _ _ = []

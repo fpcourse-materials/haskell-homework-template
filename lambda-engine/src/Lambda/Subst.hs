@@ -8,7 +8,6 @@ module Lambda.Subst
   , rename
   , fresh
   , hasHole
-  , firstHole
   , hasSubst
   , alphaEq
   , binders
@@ -91,18 +90,6 @@ hasHole (Lit _)   = False
 hasHole (Lam _ _ e) = hasHole e
 hasHole (App f a) = hasHole f || hasHole a
 hasHole (Subst bs m) = any (hasHole . snd) bs || hasHole m
-
-firstHole :: Expr -> Maybe SrcPos
-firstHole (Hole p)  = Just p
-firstHole (Var _)   = Nothing
-firstHole (Lit _)   = Nothing
-firstHole (Lam _ _ e) = firstHole e
-firstHole (App f a) = case firstHole f of
-  Just p  -> Just p
-  Nothing -> firstHole a
-firstHole (Subst bs m) = case [ p | (_, n) <- bs, Just p <- [firstHole n] ] of
-  (p : _) -> Just p
-  [] -> firstHole m
 
 hasSubst :: Expr -> Bool
 hasSubst Subst {} = True

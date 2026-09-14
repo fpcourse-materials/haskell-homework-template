@@ -9,8 +9,6 @@ module Lambda
   , Language (..)
   , Stmt (..)
   , Program (..)
-  , Decl (..)
-  , declsOf
   , lam
   , apps
     -- * Parse
@@ -31,7 +29,6 @@ module Lambda
   , TreePiece (..)
   , maxBinderStyles
   , explain
-  , treeStrings
   , renderExplain
     -- * Evaluate
   , Ctx (..)

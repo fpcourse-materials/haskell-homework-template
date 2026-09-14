@@ -3,7 +3,6 @@ module Lambda.Syntax
   ( Name
   , SrcPos (..)
   , prettyPos
-  , noPos
   , Type (..)
   , Expr (..)
   , Language (..)
@@ -15,8 +14,6 @@ module Lambda.Syntax
   , Predicate (..)
   , Stmt (..)
   , Program (..)
-  , Decl (..)
-  , declsOf
   , lam
   , apps
   ) where
@@ -35,8 +32,6 @@ prettyPos :: SrcPos -> String
 prettyPos (SrcPos file line col) =
   file ++ ":" ++ show line ++ ":" ++ show col
 
-noPos :: SrcPos
-noPos = SrcPos "<none>" 0 0
 
 -- | Simple types: variables, constants (@Int@, @Bool@), arrows.
 data Type
@@ -128,15 +123,5 @@ data Stmt
   | SFamily SrcPos Type Expr
   deriving (Eq, Show)
 
-newtype Program = Program { programStmts :: [Stmt] }
+newtype Program = Program [Stmt]
   deriving (Eq, Show)
-
--- | A plain definition, the view the REPL and the evaluator use.
-data Decl = Decl
-  { declPos  :: SrcPos
-  , declName :: Name
-  , declExpr :: Expr
-  } deriving (Eq, Show)
-
-declsOf :: Program -> [Decl]
-declsOf (Program stmts) = [ Decl p n e | SDef p n e <- stmts ]

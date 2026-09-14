@@ -10,7 +10,6 @@ module Lambda.Explain
   , TreePiece (..)
   , maxBinderStyles
   , explain
-  , treeStrings
   , renderExplain
   ) where
 
@@ -59,13 +58,6 @@ explain env expr =
         , evTree    = pieces
         , evBinders = binderCount expr
         }
-
-treeStrings :: ExplainView -> [String]
-treeStrings = map pieceText . evTree
-
-pieceText :: TreePiece -> String
-pieceText (TreePlain s)      = s
-pieceText (TreeNamed p n _)  = p ++ n
 
 binderCount :: Expr -> Int
 binderCount (Lam _ _ e) = 1 + binderCount e

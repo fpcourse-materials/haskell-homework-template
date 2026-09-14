@@ -21,7 +21,7 @@ module Lambda.Parser
   ) where
 
 import Control.Monad (void, when)
-import Data.Char (isAlphaNum, isDigit, isLetter)
+import Data.Char (isAlphaNum, isDigit, isLetter, isUpper)
 import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -367,12 +367,18 @@ pType = do
   rest <- optional (symbol "->" *> pType)
   return (maybe t (TArr t) rest)
 
+-- | Type constants are @Int@ and @Bool@; other capitalised names are
+-- rejected rather than silently read as type variables.
 pTypeAtom :: Parser Type
 pTypeAtom = parens pType <|> tyName
   where
     tyName = do
       name <- ident
-      return $ if name `elem` ["Int", "Bool"] then TCon name else TVar name
+      case name of
+        _ | name `elem` ["Int", "Bool"] -> return (TCon name)
+        c : _ | isUpper c ->
+          fail ("unknown type constant ‘" ++ name ++ "’ (only Int and Bool; type variables are lowercase)")
+        _ -> return (TVar name)
 
 ------------------------------------------------------------------------
 -- Numerals

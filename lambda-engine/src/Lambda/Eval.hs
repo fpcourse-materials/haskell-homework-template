@@ -149,13 +149,16 @@ isPrimRedex ctx bound e =
 -- Redex search
 ------------------------------------------------------------------------
 
--- | Values for call-by-value: lambdas, literals, and variables (stuck
--- names count as values so @(\\x. x) y@ is still a redex).
-isValue :: Expr -> Bool
-isValue Lam{} = True
-isValue Var{} = True
-isValue Lit{} = True
-isValue _     = False
+-- | Values for call-by-value: lambdas, literals, and stuck variables
+-- (so @(\\x. x) y@ is still a redex). A name from the environment is
+-- not a value: it has to be unfolded first, so @strict@ really does
+-- evaluate an argument such as @omega@ before the call.
+isValue :: Ctx -> [Name] -> Expr -> Bool
+isValue ctx bound e = case e of
+  Lam{} -> True
+  Lit{} -> True
+  Var x -> not (inEnv ctx bound x)
+  _     -> False
 
 isBetaRedex :: Expr -> Bool
 isBetaRedex (App Lam{} _) = True
@@ -181,11 +184,12 @@ findRedex strat ctx = go []
         | isBetaRedex app || isPrimRedex ctx bound app -> Just Here
         | otherwise -> fmap InFun (go bound f) `orElse` fmap InArg (go bound a)
       Strict
-        | isBetaRedex app && isValue a -> Just Here
-        | isPrimRedex ctx bound app    -> Just Here
-        | not (isValue f)              -> fmap InFun (go bound f)
-        | not (isValue a)              -> fmap InArg (go bound a)
-        | otherwise -> fmap InFun (go bound f) `orElse` fmap InArg (go bound a)
+        | isBetaRedex app && value a -> Just Here
+        | isPrimRedex ctx bound app  -> Just Here
+        | not (value f)              -> fmap InFun (go bound f)
+        | not (value a)              -> fmap InArg (go bound a)
+        | otherwise -> Nothing
+        where value = isValue ctx bound
       Applicative ->
         fmap InFun (go bound f) `orElse` fmap InArg (go bound a) `orElse`
           (if isBetaRedex app || isPrimRedex ctx bound app then Just Here else Nothing)
