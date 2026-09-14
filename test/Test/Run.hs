@@ -196,7 +196,7 @@ runTests tests = collectReport <$> forM tests \(name, test) -> do
       prefix <> showPath path <> " " <> msg <> if '\n' `elem` msg then "\n" else ""
     reportSummary status = putStr $ padLines 4 $ case status of
       TestPassed -> "Done :)"
-      TestPartial percent -> "In progress, " <> show (floor $ percent * 100) <> "% tests remain :|"
+      TestPartial percent -> "In progress, " <> show (floor $ percent * 100) <> "% of tests pass :|"
       TestFailed -> "Nothing here :("
       TestTodo -> "Not started yet"
 
