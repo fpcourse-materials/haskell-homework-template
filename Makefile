@@ -63,21 +63,19 @@ submit: build
 	git push origin main
 	@echo "Отчёт CI появится в вашем pull request."
 
-# Для преподавателей. Ожидает remote origin (репозиторий домашки), remote template
-# (внутренний шаблон) и remote public (шаблон в организации студентов); ветка solutions — эталон.
+# Для преподавателей. main — версия для студентов, solutions — эталон; решения в main не вливаются,
+# ветка solutions только проверяется строгим прогоном и пушится в origin. Ожидает remote origin
+# (репозиторий домашки), remote template (внутренний шаблон) и remote public (шаблон в организации студентов).
 release:
-	git push origin main:main
 	git config pull.rebase false
-	git checkout solutions
-	$(MAKE) --no-print-directory lint
-	HASKELL_TEST_STRICT=1 $(MAKE) --no-print-directory test
-	git commit -am "[no ci] $(or $(MSG),Update)" --allow-empty
 	git pull template main --no-edit
-	git push origin solutions:solutions
-	git checkout main
-	git merge solutions -m "[no ci] Merged with solutions"
 	$(MAKE) --no-print-directory lint
 	cabal build all --ghc-options=-Werror
 	git push origin main:main
 	git push public main:main
 	git checkout solutions
+	$(MAKE) --no-print-directory lint
+	HASKELL_TEST_STRICT=1 $(MAKE) --no-print-directory test
+	git commit -am "[no ci] $(or $(MSG),Update)" --allow-empty
+	git push origin solutions:solutions
+	git checkout main
