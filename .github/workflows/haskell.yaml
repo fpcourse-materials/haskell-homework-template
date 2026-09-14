@@ -99,7 +99,7 @@ jobs:
             ~/.cabal/packages
             ${{ steps.setup.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ runner.os }}-ghc-9.10.3-${{ hashFiles('cabal.project.freeze', 'homework.cabal') }}
+          key: ${{ runner.os }}-ghc-9.10.3-${{ hashFiles('cabal.project.freeze', 'homework.cabal', 'lambda-engine/lambda-engine.cabal') }}
           restore-keys: |
             ${{ runner.os }}-ghc-9.10.3-
 

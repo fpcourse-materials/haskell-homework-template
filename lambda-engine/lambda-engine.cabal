@@ -1,5 +1,5 @@
 cabal-version: 3.0
-name:          lambda
+name:          lambda-engine
 version:       0.2.0.0
 synopsis:      Lambda calculus homework checker (untyped and simply typed)
 description:
@@ -8,8 +8,8 @@ description:
   Usage: lambda check FILE.lam
          lambda load FILE.lam
          lambda load -e ":nf mult 2 3" FILE.lam
-license:       NONE
-author:        Course
+license:       MIT
+author:        Andrey Stoyan
 build-type:    Simple
 data-files:
   samples/*.lam
@@ -47,8 +47,8 @@ executable lambda
   build-depends:
     base,
     haskeline >= 0.8 && < 0.9,
-    lambda,
-    transformers
+    lambda-engine,
+    transformers >= 0.5 && < 0.7
 
 test-suite lambda-test
   import:             warnings
@@ -58,4 +58,4 @@ test-suite lambda-test
   build-depends:
     base,
     directory,
-    lambda
+    lambda-engine

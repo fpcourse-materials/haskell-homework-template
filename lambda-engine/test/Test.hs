@@ -8,12 +8,11 @@ import System.Exit (exitFailure)
 
 import Lambda
 
--- | The test data lives next to this package; when the checker is vendored
--- into a homework repository (as meta-utils/lambda), tests run from that
--- repository's root instead.
+-- | The test data lives next to this package; inside a homework repository
+-- (package lambda-engine/) tests may run from that repository's root instead.
 dataFile :: FilePath -> IO FilePath
 dataFile name = do
-  let candidates = [ prefix ++ name | prefix <- ["", "meta-utils/lambda/", "lambda/"] ]
+  let candidates = [ prefix ++ name | prefix <- ["", "lambda-engine/"] ]
   existing <- filterM doesFileExist candidates
   return (case existing of
     (path : _) -> path
