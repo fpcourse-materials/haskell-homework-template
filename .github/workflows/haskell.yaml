@@ -27,27 +27,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 'Check the repository name'
+      # Ветка feedback и PR нужны только репозиторию студента, то есть созданному из
+      # шаблона (скриптом курса или кнопкой "Use this template"). Сам шаблон, его
+      # опубликованные копии fp-2026-NN и репозитории материалов несут полную историю
+      # шаблона: их корневой коммит — давний, с другим workflow-файлом, и GitHub не даёт
+      # GITHUB_TOKEN запушить такую ссылку ("refusing to allow a GitHub App to create or
+      # update workflow ... without `workflows` permission"). Раньше на этом падала вся
+      # job, а вместе с ней пропускались тесты.
+      - name: 'Is this a student repository?'
+        id: kind
         run: |
           # В payload события push поля template_repository нет, спрашиваем API.
-          if [ -z "$TEMPLATE" ]; then
-            TEMPLATE=$(gh api "repos/$REPO" --jq '.template_repository.name // empty' 2>/dev/null || true)
+          # Если API не ответил, считаем репозиторий студенческим: лучше лишняя попытка,
+          # чем студент без ветки feedback.
+          if info=$(gh api "repos/$REPO" --jq '[.is_template, (.template_repository.name // "")] | @tsv'); then
+            is_template=$(printf '%s' "$info" | cut -f1)
+            TEMPLATE=$(printf '%s' "$info" | cut -f2)
+            if [ "$is_template" = "true" ] || [ -z "$TEMPLATE" ]; then
+              echo "Это не репозиторий студента (шаблон или материалы): ветка feedback и PR здесь не нужны."
+              echo "student=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
+          echo "student=true" >> "$GITHUB_OUTPUT"
           if [ -n "$TEMPLATE" ] && [ "$REPO_NAME" != "$TEMPLATE-$ACTOR" ]; then
             echo "::warning::Репозиторий называется '$REPO_NAME', а по правилам курса должен называться '$TEMPLATE-<ваш логин>'."
           fi
 
       - name: 'Create the feedback branch'
+        if: steps.kind.outputs.student == 'true'
         run: |
-          root=$(git rev-list --max-parents=0 HEAD | tail -n 1)
           if git ls-remote --exit-code --heads origin feedback > /dev/null; then
             echo "feedback branch exists"
-          else
-            git push origin "$root:refs/heads/feedback"
+            exit 0
           fi
+          root=$(git rev-list --max-parents=0 HEAD | tail -n 1)
+          # Отказ не валит job: тесты и отчёт важнее. Ветку тогда создаёт преподаватель
+          # (его токену workflow-файлы разрешены), `make audit` в ops показывает, у кого её нет.
+          git push origin "$root:refs/heads/feedback" \
+            || echo "::warning::Не удалось создать ветку feedback от корневого коммита $root (скорее всего, workflow-файл в нём отличается от текущего, а GITHUB_TOKEN такое пушить нельзя). Отчёт в PR не появится, пока ветку не создаст преподаватель."
 
       - name: 'Open the pull request'
+        if: steps.kind.outputs.student == 'true'
         run: |
+          if ! git ls-remote --exit-code --heads origin feedback > /dev/null; then
+            echo "no feedback branch, nothing to open the pull request against"
+            exit 0
+          fi
           open=$(gh pr list --repo "$REPO" --base feedback --head main --state open --json number --jq 'length')
           if [ "$open" != "0" ]; then
             echo "pull request exists"
