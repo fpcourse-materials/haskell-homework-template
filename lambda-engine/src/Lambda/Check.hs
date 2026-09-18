@@ -308,11 +308,14 @@ prettyPred p = case p of
 expectLimit :: Int
 expectLimit = 3000
 
+-- | The message names the sides, not «получено / ожидалось»: which side holds
+-- the student's answer depends on the task (@expect or true false = true@
+-- against @expect K I S = ...@), so either fixed wording is wrong half the time.
 checkExpect :: Loaded -> Ctx -> Expr -> Expr -> Either String ()
 checkExpect ld ctx a b = guarded ld [a, b] $
   case betaEq ctx expectLimit a b of
     Equal -> Right ()
-    Differ x y -> Left ("получено " ++ prettyDecoded x ++ ", ожидалось " ++ prettyDecoded y)
+    Differ x y -> Left ("слева получается " ++ prettyDecoded x ++ ", а справа " ++ prettyDecoded y)
     Undecided -> Left "не удалось сравнить за лимит шагов (возможно, терм расходится)"
 
 checkFree :: Loaded -> Name -> [Name] -> Either String ()
@@ -338,6 +341,8 @@ checkRename ld n e = do
                    ++ unwords (nub (binders e)))
         else Right ()
 
+-- | The messages never print a term: the pretty-printer writes the minimal
+-- form, which is the answer to the task.
 checkMinimal :: Loaded -> Name -> Expr -> String -> Either String ()
 checkMinimal ld n e raw = do
   given <- lookupDef ld n
@@ -345,13 +350,19 @@ checkMinimal ld n e raw = do
     if erase e /= erase given
       then if alphaEq (erase e) (erase given)
              then Left "имена связанных переменных менять не нужно"
-             else Left ("это другой терм; исходный: " ++ prettyExpr given)
+             else Left ("это другой терм, не ‘" ++ n ++ "’: скобки расставлены так, что дерево изменилось")
       else
         let have = parenCount raw
             need = parenCount (prettyExpr e)
         in  if have > need
-              then Left ("лишние скобки: " ++ show have ++ " вместо " ++ show need ++ "; без лишних: " ++ prettyExpr e)
+              then Left ("остались лишние скобки: можно убрать ещё " ++ pairs (have - need))
               else Right ()
+  where
+    pairs k = show k ++ " " ++ plural k ++ " скобок"
+    plural k
+      | k `mod` 10 == 1 && k `mod` 100 /= 11 = "пару"
+      | k `mod` 10 `elem` [2, 3, 4] && k `mod` 100 `notElem` [12, 13, 14] = "пары"
+      | otherwise = "пар"
 
 checkPred :: Loaded -> Ctx -> Name -> Predicate -> Either String ()
 checkPred ld ctx n p = do
@@ -443,6 +454,12 @@ checkChain ld ctx label _ opts ls@((_, firstTerm) : restLines) =
         if alphaEq (erase prev) (erase cur) || (isStrategy && alphaEq (erase (expand prev)) (erase (expand cur)))
           then Right ()
           else Left ("строки " ++ show (i - 1) ++ " и " ++ show i ++ " не α-эквивалентны")
+      ArrEta ->
+        let oneEta from to = any (alphaEq (erase to)) (etaContractions (erase from))
+            sides = [(prev, cur)] ++ [ (expand prev, expand cur) | isStrategy ]
+        in  if or [ oneEta a b || oneEta b a | (a, b) <- sides ] then Right ()
+            else Left ("строка " ++ show i ++ " не получается из строки " ++ show (i - 1)
+                       ++ " одним η-шагом: \\x. M x ~eta~> M, если x не свободна в M (можно и в обратную сторону)")
       ArrDelta name
         | name `notElem` map fst env ->
             Left ("‘" ++ name ++ "’ не определено" ++ legacyDelta name)
@@ -570,7 +587,7 @@ distinct ld ctx names = do
       [] -> Right ()
       ((a, b) : _) -> Left ("‘" ++ a ++ "’ и ‘" ++ b ++ "’ αβη-эквивалентны")
   where
-    normal (n, d) = case normalFormWith Lazy ctx limit d of
+    normal (n, d) = case normalize ctx limit d of
       Left _ -> Left ("‘" ++ n ++ "’ не нормализуется за лимит шагов")
       Right nf -> Right (n, etaReduce (erase nf))
 
@@ -579,7 +596,7 @@ checkFamily ld ctx label ty f =
   case blockers ld f of
     (m : _) -> [CheckResult label (Left m)]
     [] ->
-      let members = [ (k, normalFormWith Lazy ctx limit (App f (churchNumeral k))) | k <- [0 .. 4] ]
+      let members = [ (k, normalize ctx limit (App f (churchNumeral k))) | k <- [0 .. 4] ]
           each = [ CheckResult (label ++ " → член " ++ show k) $ case r of
                      Left _ -> Left ("F ⌜" ++ show k ++ "⌝ не нормализуется за лимит шагов")
                      Right t -> inhabitantTerm ld ty (erase t)

@@ -219,7 +219,7 @@ execCommand ctx (CmdNf strat expr) =
   case resolve ctx expr of
     Left err -> (ctx, CommandErr err)
     Right e  ->
-      case normalFormWith strat ctx defaultLimit e of
+      case (if strat == Lazy then normalize else normalFormWith strat) ctx defaultLimit e of
         Left TooManySteps ->
           (ctx, CommandErr "error: did not reach normal form (reduction limit)")
         Right nf ->
@@ -230,7 +230,7 @@ execCommand ctx (CmdDecode expr) =
   case resolve ctx expr of
     Left err -> (ctx, CommandErr err)
     Right e  ->
-      case normalFormWith Lazy ctx defaultLimit e of
+      case normalize ctx defaultLimit e of
         Left TooManySteps ->
           (ctx, CommandErr "error: did not reach normal form (reduction limit)")
         Right nf -> (ctx, CommandOut (prettyDecoded nf))

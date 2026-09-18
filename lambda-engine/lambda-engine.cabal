@@ -27,9 +27,11 @@ library
     Lambda.Check
     Lambda.Color
     Lambda.Command
+    Lambda.Console
     Lambda.Decode
     Lambda.Eval
     Lambda.Explain
+    Lambda.Need
     Lambda.Parser
     Lambda.Pretty
     Lambda.Subst
@@ -37,8 +39,14 @@ library
     Lambda.Types
   build-depends:
     base >= 4.17 && < 5,
+    containers >= 0.6 && < 0.8,
     filepath >= 1.4 && < 2,
-    megaparsec >= 9.2 && < 10
+    megaparsec >= 9.2 && < 10,
+    transformers >= 0.5 && < 0.7
+  -- Lambda.Console переключает кодовую страницу консоли Windows на UTF-8.
+  -- Win32 поставляется вместе с GHC и уже нужен haskeline, ничего нового не скачивается.
+  if os(windows)
+    build-depends: Win32 >= 2.10 && < 2.15
 
 executable lambda
   import:             warnings

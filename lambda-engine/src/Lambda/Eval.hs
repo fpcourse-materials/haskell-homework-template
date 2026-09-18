@@ -32,6 +32,7 @@ module Lambda.Eval
   , followSteps
   , normalForm
   , normalFormWith
+  , normalize
     -- * Enumerating single steps
   , betaPaths
   , contractBeta
@@ -51,6 +52,7 @@ module Lambda.Eval
 
 import Data.Maybe (isJust)
 
+import Lambda.Need (normalizeNeed)
 import Lambda.Subst (alphaEq, etaReduce, expandAll, freeVars, fresh, subst)
 import Lambda.Syntax
 
@@ -275,6 +277,22 @@ normalFormWith strat ctx = go
           | n <= 0    -> Left TooManySteps
           | otherwise -> go (n - 1) e'
 
+-- | Fuel of the call-by-need normaliser: β-steps plus nodes of the result.
+-- Generous, because shared steps are cheap; a diverging term burns it in a
+-- fraction of a second.
+needFuel :: Int
+needFuel = 500000
+
+-- | Normal form when only the result matters (@expect@, @:nf@, @:decode@),
+-- not the steps. Pure terms go through "Lambda.Need", which evaluates every
+-- argument at most once; without it a solution that uses an argument several
+-- times needs exponentially many steps. If that gives up, or primitives are
+-- on, fall back to step-by-step normal order within @limit@ steps.
+normalize :: Ctx -> Int -> Expr -> Either EvalError Expr
+normalize ctx limit e
+  | not (ctxTyped ctx), Just nf <- normalizeNeed (ctxEnv ctx) needFuel e = Right nf
+  | otherwise = normalFormWith Lazy ctx limit e
+
 ------------------------------------------------------------------------
 -- Enumerating single steps (for chains)
 ------------------------------------------------------------------------
@@ -377,7 +395,7 @@ betaEq ctx limit a0 b0 =
       b = expandAll (ctxEnv ctx) b0
       ctx' = ctx { ctxEnv = [] }
   in  if alphaEq a b then Equal else
-      case (normalFormWith Lazy ctx' limit a, normalFormWith Lazy ctx' limit b) of
+      case (normalize ctx' limit a, normalize ctx' limit b) of
         (Right na, Right nb)
           | alphaEq (etaReduce na) (etaReduce nb) -> Equal
           | otherwise -> Differ na nb

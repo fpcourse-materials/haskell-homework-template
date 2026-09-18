@@ -22,11 +22,13 @@ import Lambda.Command
   , replHelp
   , runLine
   )
+import Lambda.Console (setupConsole)
 import Lambda.Eval (Ctx (..))
 import Lambda.Syntax (Language (..))
 
 main :: IO ()
 main = do
+  setupConsole
   args <- getArgs
   case parseArgs args of
     Left err           -> die err

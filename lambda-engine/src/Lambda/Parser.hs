@@ -211,14 +211,14 @@ pChain pos = do
 
     skipBlankLines = void $ many (try (sc *> eol))
 
--- | @~b~>@, @~s~>@, @~~>@, @=a=@, or @~NAME~>@ for unfolding a definition
--- (the lecture's ⇝ with the name as subscript). @b@ and @s@ are taken by
--- the first two arrows, see 'arrowNames'.
+-- | @~b~>@, @~s~>@, @~eta~>@, @~~>@, @=a=@, or @~NAME~>@ for unfolding a
+-- definition (the lecture's ⇝ with the name as subscript). @b@, @s@ and
+-- @eta@ are taken by arrows, see 'arrowNames'.
 pArrow :: Parser Arrow
 pArrow = lexeme $ choice
   [ ArrMany  <$ try (string "~~>")
   , ArrAlpha <$ try (string "=a=")
-  , try named <?> "arrow (~b~>, ~NAME~>, =a=, ~~>, ~s~>)"
+  , try named <?> "arrow (~b~>, ~NAME~>, ~eta~>, =a=, ~~>, ~s~>)"
   ]
   where
     named = do
@@ -230,6 +230,7 @@ pArrow = lexeme $ choice
       case name of
         "b" -> return ArrBeta
         "s" -> return ArrSubst
+        "eta" -> return ArrEta
         _ | all isDigit name ->
               fail ("‘~" ++ name ++ "~>’: numerals are already unfolded, no step is needed")
           | identStart first -> return (ArrDelta name)

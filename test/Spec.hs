@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 import Data.Maybe (fromMaybe)
+import Lambda.Console (setupConsole)
 import System.Environment (lookupEnv)
 import Test.Lambda (lambdaTests)
 import Test.Prelude
@@ -15,6 +16,8 @@ import SpecLevel3 qualified
 -- В λ-домашке (флаг @lambda@ в homework.cabal, макрос @LAMBDA@) Haskell-уровней нет.
 main :: IO ()
 main = do
+  -- До любого чтения файлов и вывода: UTF-8 и консоль Windows, см. "Lambda.Console".
+  setupConsole
   file <- fromMaybe "src/hw.lam" <$> lookupEnv "LAMBDA_FILE"
   lambda <- lambdaTests [file]
   testMain $ lambda ++ haskell

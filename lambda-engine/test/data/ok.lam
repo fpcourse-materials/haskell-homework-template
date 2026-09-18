@@ -91,3 +91,26 @@ chain a1 (strategy applicative) =
 task 3.3 (рекурсия)
 Fx := Y (\f m. m f)
 expect Fx x = x Fx
+
+task 3.4 (η-шаг в цепочке)
+chain e1 =
+  \f. (\x. f x)
+  ~eta~> \f. f
+chain e2 =
+  \f. f
+  ~eta~> \f x. f x
+
+task 3.5 (аргумент используется много раз)
+-- Решение студента к «делимости на три»: magic использует аргумент шесть раз,
+-- и пошаговая редукция дерева тратит около 6^n шагов. Проходит только с
+-- нормализатором, который вычисляет аргумент один раз (Lambda.Need).
+three := \a b c. pair a (pair b c)
+frst := \t. fst t
+scnd := \t. fst (snd t)
+thrd := \t. snd (snd t)
+nor := \a b. not (or a b)
+magic := \t. three (nor (frst t) (scnd t)) (nor (scnd t) (thrd t)) (nor (frst t) (thrd t))
+divides3 := \n. thrd (n magic (three false false true))
+expect divides3 9 = true
+expect divides3 10 = false
+expect divides3 30 = true

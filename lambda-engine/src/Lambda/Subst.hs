@@ -17,6 +17,7 @@ module Lambda.Subst
   , namesUsedBy
   , expandAll
   , etaReduce
+  , etaContractions
   , parenCount
   ) where
 
@@ -176,6 +177,19 @@ etaReduce e = case e of
       body' -> Lam x t body'
   App f a -> App (etaReduce f) (etaReduce a)
   _ -> e
+
+-- | Every term obtained by one η-contraction (@\\x. f x@ to @f@, where @x@
+-- is not free in @f@) somewhere inside the term.
+etaContractions :: Expr -> [Expr]
+etaContractions e = here ++ inside
+  where
+    here = case e of
+      Lam x _ (App f (Var y)) | y == x, x `notElem` freeVars f -> [f]
+      _ -> []
+    inside = case e of
+      Lam x t body -> [ Lam x t body' | body' <- etaContractions body ]
+      App f a -> [ App f' a | f' <- etaContractions f ] ++ [ App f a' | a' <- etaContractions a ]
+      _ -> []
 
 parenCount :: String -> Int
 parenCount = length . filter (== '(')

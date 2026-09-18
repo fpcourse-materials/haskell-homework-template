@@ -73,11 +73,14 @@ data Arrow
   | ArrAlpha       -- ^ @=a=@ α-renaming
   | ArrMany        -- ^ @~~>@ at most k steps
   | ArrSubst       -- ^ @~s~>@ substitution performed
+  | ArrEta         -- ^ @~eta~>@ one η-step: @\\x. f x@ to @f@, or back
   deriving (Eq, Show)
 
--- | Names that cannot be defined because @~b~>@ and @~s~>@ are arrows.
+-- | Names that cannot be defined because @~b~>@, @~s~>@ and @~eta~>@ are
+-- arrows. The η-arrow is spelled out: a one-letter @e@ is a name students
+-- are likely to use for their own definitions.
 arrowNames :: [Name]
-arrowNames = ["b", "s"]
+arrowNames = ["b", "s", "eta"]
 
 data ChainStrategy = ChainNormal | ChainApplicative
   deriving (Eq, Show)

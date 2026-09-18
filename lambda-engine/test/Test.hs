@@ -12,14 +12,17 @@ import Test.QuickCheck qualified as QC
 import Lambda
 import Lambda.Check (isHoleMessage)
 import Lambda.Color (ColorMode (..), Palette (..), paint, parseColorMode, plainPalette, withCode)
-import Lambda.Eval (parseStrategy, prettyStrategy)
+import Lambda.Console (setupConsole)
+import Lambda.Eval (normalize, parseStrategy, prettyStrategy)
+import Lambda.Need (normalizeNeed)
 import Lambda.Pretty (prettyTypeGreek2)
-import Lambda.Subst (barendregt, binders, hasHole, parenCount)
+import Lambda.Subst (barendregt, binders, etaContractions, hasHole, parenCount)
 import Lambda.Syntax (Arrow (..), ChainOpts (..))
 import Lambda.Types (prettyTypeError, primTypes)
 
 main :: IO ()
 main = do
+  setupConsole
   files <- fileTests
   errorFiles <- errorFileTests
   result <- runTestTT $ TestList
@@ -178,6 +181,16 @@ evalTests = group "eval"
       _ -> Nothing)
   , eq "expand" "\\x y. x" (prettyExpr (expandAll (ctxEnv ctx) (Var "K")))
   , eq "eta" "f" (prettyExpr (etaReduce (pure' "\\x. f x")))
+  , eq "eta contractions: the outer redex, then the inner one" ["\\f y. f y", "\\f x. f x"]
+      (map prettyExpr (etaContractions (pure' "\\f. (\\x. (\\y. f y) x)")))
+  , eq "no eta when the variable is used" [] (etaContractions (pure' "\\x. f x x"))
+  , eq "need: shared argument" (Just "\\s z. s (s (s (s z)))")
+      (fmap prettyExpr (normalizeNeed [] 1000 (pure' "(\\n s z. n s (n s z)) 2")))
+  , eq "need: capture" (Just "\\y'. y") (fmap prettyExpr (normalizeNeed [] 1000 (pure' "(\\x. \\y. x) y")))
+  , eq "need: definitions" (Just "x") (fmap prettyExpr (normalizeNeed (ctxEnv ctx) 1000 (pure' "K x I")))
+  , eq "need: omega runs out of fuel" Nothing (normalizeNeed [] 1000 (pure' "(\\x. x x) (\\x. x x)"))
+  , eq "need: agrees with normal order under binders" (Right "\\a. a (\\b. b)")
+      (fmap prettyExpr (normalize (pureCtx []) 100 (pure' "\\a. a ((\\c. c) (\\b. b))")))
   -- strategies
   , eq "normal step" "y" (afterStep Lazy term)
   , eq "applicative step" "(\\x. y) w" (afterStep Applicative term)
@@ -575,6 +588,12 @@ propertyTests = group "properties"
       case normalFormWith Lazy ctx 200 e of
         Left TooManySteps -> True
         Right nf -> betaEq ctx 500 e nf == Equal
+  , prop "call-by-need gives the normal-order normal form" $ \(Term e) ->
+      case normalFormWith Lazy ctx 200 e of
+        Left TooManySteps -> True
+        Right nf -> fmap (alphaEq nf) (normalizeNeed (ctxEnv ctx) 100000 e) == Just True
+  , prop "an η-contraction is one η-step away" $ \(Term e) ->
+      all (\c -> alphaEq (etaReduce c) (etaReduce e)) (etaContractions e)
   , prop "η-reduction is idempotent" $ \(Term e) -> etaReduce (etaReduce e) == etaReduce e
   , prop "erasing annotations is idempotent" $ \(Term e) -> erase (erase e) == erase e
   , prop "Church numerals decode to themselves" $ QC.forAll (QC.choose (0, 20 :: Integer)) $ \n ->
@@ -622,7 +641,7 @@ fileTests = do
     [ group "ok.lam" $ case ok' of
         Left err -> [ok ("loads: " ++ err) False]
         Right tasks ->
-          [ eq "tasks" 9 (length tasks)
+          [ eq "tasks" 11 (length tasks)
           , TestList [ eq (trId t ++ " " ++ show (trChecks t)) Done (taskStatus t) | t <- tasks ]
           , ok "reportOk" (reportOk tasks)
           , ok "prettyResults" ("task 1.1 (скобки): DONE" `isInfixOf` prettyResults tasks)
@@ -661,6 +680,8 @@ fileTests = do
           , eq "1.2 partial" (Partial 1 2) (status "1.2")
           , eq "1.3 wrong step" (Partial 1 3) (status "1.3")
           , eq "1.4 parens" Failed (status "1.4")
+          , says "1.4" "остались лишние скобки: можно убрать ещё 1 пару скобок"
+          , ok "1.4 minimal never prints the answer" (not (any ("x (y x)" `isInfixOf`) (messages "1.4")))
           , eq "1.5 needs delta" (Partial 1 2) (status "1.5")
           , eq "1.6 typo" Failed (status "1.6")
           , eq "1.7 omega" Failed (status "1.7")
@@ -669,7 +690,7 @@ fileTests = do
           , eq "1.10 arrow name" Failed (status "1.10")
           , ok "hole messages end with (...)" (all isHoleMessage (messages "1.1"))
           , ok "wrong answers are not holes" (not (any isHoleMessage (messages "1.2")))
-          , says "1.2" "ожидалось"
+          , says "1.2" "слева получается"
           , says "1.8" "раскрытием ‘K’, а не ‘S’"
           , says "1.9" "раскрытие имени пишется с самим именем"
           , says "1.10" "занято стрелкой ~s~>"
@@ -678,7 +699,7 @@ fileTests = do
           , ok "prettyResults status" ("task 1.2 (неверный ответ, PARTIAL): PARTIAL 1/2" `isInfixOf` report)
           , ok "prettyResults message indent" ("\n    expect t x = x\n      в ‘t’ осталась дырка (...)" `isInfixOf` report)
           ]
-    , eq "isHoleMessage" [True, False] (map isHoleMessage ["в ‘t’ осталась дырка (...)", "получено ⌜7⌝, ожидалось ⌜8⌝"])
+    , eq "isHoleMessage" [True, False] (map isHoleMessage ["в ‘t’ осталась дырка (...)", "слева получается ⌜7⌝, а справа ⌜8⌝"])
     , ok "missing file" (leftHas "не удаётся открыть" missing)
     , group "imports"
         [ ok "cyclic import" (leftHas "циклический import" cyc)
@@ -739,7 +760,9 @@ errorFileTests = do
         , says "2.16" "терм не α-эквивалентен ‘rn’: \\x x. x"
         , eq "2.17 minimal" Failed (status "2.17")
         , says "2.17" "имена связанных переменных менять не нужно"
-        , says "2.17" "это другой терм; исходный: \\x. x (y x)"
+        , says "2.17" "это другой терм, не ‘mn’"
+        , ok "2.17 minimal never prints the answer"
+            (not (any ("x (y x)" `isInfixOf`) [ m | CheckResult _ (Left m) <- trChecks (task "2.17") ]))
         , eq "2.18 predicates" (Partial 2 8) (status "2.18")
         , says "2.18" "терм не в нормальной форме: \\x. (\\y. y) x"
         , says "2.18" "предикат ‘whnf’ выполняется, а не должен"
@@ -780,7 +803,7 @@ errorFileTests = do
         , says "3.3" "F ⌜0⌝ и F ⌜1⌝ αβη-эквивалентны"
         , says "3.3" "ответ не дан (...)"
         , eq "3.4 constants" Failed (status "3.4")
-        , says "3.4" "получено plus 1 true, ожидалось 2"
+        , says "3.4" "слева получается plus 1 true, а справа 2"
         , says "3.4" "наиболее общий тип: Int -> Int, а не Int -> Int -> Int"
         ]
     ]
