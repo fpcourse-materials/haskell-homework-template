@@ -272,7 +272,7 @@ runStmt :: Loaded -> Ctx -> Stmt -> [CheckResult]
 runStmt ld ctx stmt = case stmt of
   SFree pos _ ["..."] -> one pos (Left answerHole)
   SType pos _ (Just (TVar "...")) -> one pos (Left answerHole)
-  SInhabit pos _ ["..."] -> one pos (Left answerHole)
+  SInhabit pos _ _ ["..."] -> one pos (Left answerHole)
   SExpect pos a b -> one pos (checkExpect ld ctx a b)
   SFree pos n xs -> one pos (checkFree ld n xs)
   SRename pos n e -> one pos (checkRename ld n e)
@@ -282,7 +282,7 @@ runStmt ld ctx stmt = case stmt of
   SChain pos n opts ls -> checkChain ld ctx (lineText ld pos) n opts ls
   SType pos n mt -> one pos (checkType ld ctx n mt)
   SChurch pos n e -> one pos (checkChurchStmt ld ctx n e)
-  SInhabit pos t ns -> checkInhabit ld ctx (lineText ld pos) t ns
+  SInhabit pos t k ns -> checkInhabit ld ctx (lineText ld pos) t k ns
   SFamily pos t f -> checkFamily ld ctx (lineText ld pos) t f
   _ -> []
   where
@@ -554,15 +554,20 @@ checkChurchStmt ld _ n e = do
                 | otherwise -> Left ("аннотации дают тип " ++ prettyTypeGreek ty
                                      ++ ", а наиболее общий: " ++ prettyTypeGreek principal)
 
-checkInhabit :: Loaded -> Ctx -> String -> Type -> [Name] -> [CheckResult]
-checkInhabit ld ctx label ty names
+checkInhabit :: Loaded -> Ctx -> String -> Type -> Maybe Int -> [Name] -> [CheckResult]
+checkInhabit ld ctx label ty wanted names
   | null names =
       [CheckResult label $
         if inhabitable 4 ty then Left ("тип " ++ prettyType ty ++ " населён, обитатель есть") else Right ()]
   | otherwise =
       let each = [ CheckResult (label ++ " → " ++ n) (inhabitant ld ctx ty n) | n <- names ]
           distinctCheck = [ CheckResult (label ++ " → попарно различны") (distinct ld ctx names) | length names > 1 ]
-      in  each ++ distinctCheck
+          -- @inhabit T (k)@: the task asks for at least k inhabitants
+          countCheck = [ CheckResult (label ++ " → не меньше " ++ show k ++ " обитателей") $
+                           if length names >= k then Right ()
+                           else Left ("перечислено " ++ show (length names) ++ ", а нужно " ++ show k)
+                       | Just k <- [wanted] ]
+      in  each ++ distinctCheck ++ countCheck
 
 inhabitant :: Loaded -> Ctx -> Type -> Name -> Either String ()
 inhabitant ld _ ty n = do

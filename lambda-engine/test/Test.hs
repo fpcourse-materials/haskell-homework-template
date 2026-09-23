@@ -110,6 +110,20 @@ parseTests = group "parse"
   , eq "annotation" (Lam "x" (Just (TArr (TVar "a") (TVar "a"))) (Var "x")) (mustParse "\\x:(a -> a). x")
   , eq "literal" (Lit 3) (mustParse "3")
   , eq "numeral" (churchNumeral 2) (pure' "2")
+  -- infix operators are sugar for the primitive names
+  , eq "infix plus" (App (App (Var "plus") (Var "x")) (Lit 1)) (mustParse "x + 1")
+  , eq "infix precedence" (App (App (Var "plus") (Lit 1)) (App (App (Var "mult") (Lit 2)) (Lit 3))) (mustParse "1 + 2 * 3")
+  , eq "infix left assoc" (App (App (Var "minus") (App (App (Var "minus") (Var "a")) (Var "b"))) (Var "c")) (mustParse "a - b - c")
+  , eq "infix below application" (App (App (Var "lt") (App (Var "f") (Var "x"))) (Lit 2)) (mustParse "f x < 2")
+  , eq "infix eq" (App (App (Var "eq") (Var "x")) (Lit 0)) (mustParse "x == 0")
+  , eq "minus is not an arrow" (Lam "x" Nothing (App (App (Var "minus") (Var "x")) (Lit 1))) (mustParse "\\x -> x - 1")
+  , eq "infix parens" (App (App (Var "mult") (App (App (Var "plus") (Var "x")) (Lit 1))) (Lit 2)) (mustParse "(x + 1) * 2")
+  , case prog "expect x + 1 = 2\n" of
+      Right [SExpect _ a b] -> eq "infix before =" (App (App (Var "plus") (Var "x")) (Lit 1), Lit 2) (a, b)
+      other -> eq "infix before =" "expect" (show other)
+  , case prog "inhabit a -> a -> a (2): p1 p2\n" of
+      Right [SInhabit _ _ k ns] -> eq "inhabit count" (Just 2, ["p1", "p2"]) (k, ns)
+      other -> eq "inhabit count" "inhabit" (show other)
   , eq "subst" (Subst [("x", Var "S")] (App (Var "x") (Var "y"))) (mustParse "([x |-> S] x y)")
   , eq "subst2" (Subst [("x", Var "S"), ("y", Var "K")] (Var "x")) (mustParse "([x |-> S, y |-> K] x)")
   , ok "subst with := rejected" (isLeft' (parseExpr "([x := S] x)"))
@@ -146,7 +160,7 @@ parseTests = group "parse"
         ]
       other -> eq "statements" "task, chain, expect" (show other)
   , case prog "type t = ...\nfree f = ...\ntype u = none\ninhabit a: none\n" of
-      Right [SType _ _ t1, SFree _ _ names, SType _ _ t2, SInhabit _ _ inh] -> group "hole statements"
+      Right [SType _ _ t1, SFree _ _ names, SType _ _ t2, SInhabit _ _ _ inh] -> group "hole statements"
         [ eq "type hole" (Just (TVar "...")) t1
         , eq "free hole" ["..."] names
         , eq "type none" Nothing t2
@@ -326,6 +340,14 @@ prettyTests = group "pretty"
   , eq "focus fun" ("f (g x)", (0, 1)) (prettyFocus (InFun Here) (pure' "f (g x)"))
   , eq "focus body" ("\\x. x y", (4, 3)) (prettyFocus (InBody Here) (pure' "\\x. x y"))
   , eq "focus whole" ("f x", (0, 3)) (prettyFocus Here (pure' "f x"))
+  , eq "infix round trip" "x + 1" (prettyExpr (mustParse "x + 1"))
+  , eq "infix precedence printed" "1 + 2 * 3" (prettyExpr (mustParse "plus 1 (mult 2 3)"))
+  , eq "infix parens printed" "(x + 1) * 2" (prettyExpr (mustParse "mult (plus x 1) 2"))
+  , eq "infix right assoc parens" "a - (b - c)" (prettyExpr (mustParse "minus a (minus b c)"))
+  , eq "infix under application" "if (x < 2) (x + 1) 0" (prettyExpr (mustParse "if (lt x 2) (plus x 1) 0"))
+  , eq "unsaturated stays prefix" "plus 1" (prettyExpr (mustParse "plus 1"))
+  , eq "focus infix right" ("x + f y", (4, 3)) (prettyFocus (InArg Here) (mustParse "x + f y"))
+  , eq "focus infix left" ("f y + x", (0, 3)) (prettyFocus (InFun (InArg Here)) (mustParse "f y + x"))
   , eq "caret" "  ^~~~~" (prettyCaret (2, 5))
   , eq "caret single" "^" (prettyCaret (0, 1))
   , eq "caret clamps" "^" (prettyCaret (-1, 0))
@@ -500,17 +522,18 @@ commandTests = group "command"
       [ eq "primitive" "3" (outT "plus 1 2")
       , eq "literal stays a literal" "3" (outT "3")
       , eq ":decode" "true" (outT ":decode true")
-      , eq ":step" "plus 1 (mult 2 3)\n       ^~~~~~~~~~\n~mult~> plus 1 6" (outT ":step plus 1 (mult 2 3)")
+      , eq ":step" "1 + 2 * 3\n    ^~~~~\n~mult~> 1 + 6" (outT ":step plus 1 (mult 2 3)")
+      , eq ":step infix input" "1 + 2 * 3\n    ^~~~~\n~mult~> 1 + 6" (outT ":step 1 + 2 * 3")
       , eq ":follow" (unlinesNoEnd
-          [ "if (lt 1 2) 10 20"
-          , "   ^~~~~~~~"
+          [ "if (1 < 2) 10 20"
+          , "   ^~~~~~~"
           , "~lt~> if true 10 20"
           , "      ^~~~~~~~~~~~~"
           , "~if~> 10"
           ]) (outT ":follow if (lt 1 2) 10 20")
       , eq ":type primitive" "plus : Int -> Int -> Int" (outT ":type plus")
       , eq ":type if" "if : Bool -> α -> α -> α" (outT ":type if")
-      , eq "definition may use primitives" "d := \\n. plus n n" (render rD)
+      , eq "definition may use primitives" "d := \\n. n + n" (render rD)
       , eq ":type of definition" "d : Int -> Int" (render (runInput ctxD ":type d"))
       ]
   ]

@@ -101,7 +101,7 @@ pStmt = do
     , keyword "chain"    *> pChain pos
     , keyword "type"     *> (SType pos <$> ident <* symbol "=" <*> pTypeOrNone)
     , keyword "church"   *> (SChurch pos <$> ident <* symbol "=" <*> pExpr)
-    , keyword "inhabit"  *> (SInhabit pos <$> pType <* symbol ":" <*> pNamesOrNone)
+    , keyword "inhabit"  *> (SInhabit pos <$> pType <*> optional (parens (lexeme L.decimal)) <* symbol ":" <*> pNamesOrNone)
     , keyword "family"   *> (SFamily pos <$> pType <* symbol ":" <*> pExpr)
     , pDef pos
     ]
@@ -294,7 +294,28 @@ srcPos = do
 ------------------------------------------------------------------------
 
 pExpr :: Parser Expr
-pExpr = pLam <|> pApps
+pExpr = pLam <|> pOps
+
+-- | Infix operators are sugar for applications of the primitive names:
+-- @x + 1@ is @plus x 1@ (see 'infixOps'). Precedence, from tightest:
+-- application, @*@, @+ -@, @< ==@; all left-associative. The right operand
+-- may be a lambda without parentheses, as in application.
+pOps :: Parser Expr
+pOps = level [("<", "lt"), ("==", "eq")]
+     $ level [("+", "plus"), ("-", "minus")]
+     $ level [("*", "mult")] pApps
+  where
+    level ops operand = operand >>= go
+      where
+        go x = (do n <- choice [ n <$ pOperator s | (s, n) <- ops ]
+                   y <- operand <|> pLam
+                   go (App (App (Var n) x) y))
+               <|> pure x
+
+-- | An operator token, not the prefix of a longer one: @-@ is not @->@,
+-- @=@ alone (the @=@ of @expect A = B@) is not @==@.
+pOperator :: String -> Parser ()
+pOperator s = lexeme . try $ string s *> notFollowedBy (oneOf "-=<>+*")
 
 -- | @\\x y. body@, @λx y. body@ or @\\x y -> body@; binders may carry
 -- Church annotations @x:T@.

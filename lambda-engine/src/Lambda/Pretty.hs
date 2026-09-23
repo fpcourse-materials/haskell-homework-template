@@ -40,14 +40,35 @@ prettyAnn :: Maybe Path -> Int -> Expr -> (String, Maybe (Int, Int))
 prettyAnn (Just Here) prec expr =
   let (s, _) = prettyAnn Nothing prec expr
   in  (s, Just (0, length s))
+-- Precedences: 0 lambda, 1 comparison (< ==), 2 additive (+ -), 3 multiplicative (*),
+-- 4 application, atoms never wrapped — the same levels the parser uses.
 prettyAnn focus prec expr = case expr of
   Var x  -> (x, Nothing)
   Lit n  -> (show n, Nothing)
   Hole _ -> ("...", Nothing)
   Subst bs m ->
     let binds = [ x ++ " |-> " ++ fst (prettyAnn Nothing 0 n) | (x, n) <- bs ]
-        (ms, _) = prettyAnn Nothing 1 m
-    in  applyWrap 1 prec ("[" ++ joinWith ", " binds ++ "] " ++ ms) Nothing
+        (ms, _) = prettyAnn Nothing 4 m
+    in  applyWrap 4 prec ("[" ++ joinWith ", " binds ++ "] " ++ ms) Nothing
+  -- a saturated primitive with an operator spelling prints infix: @plus x 1@ is @x + 1@
+  App (App (Var op) a) b | Just (sym, p) <- lookup op infixOps ->
+    let aFocus = case focus of
+          Just (InFun (InArg q)) -> Just q
+          _                      -> Nothing
+        bFocus = case focus of
+          Just (InArg q) -> Just q
+          _              -> Nothing
+        opFocus = case focus of
+          Just (InFun (InFun _)) -> True
+          _                      -> False
+        (as, spa) = prettyAnn aFocus p a
+        (bs, spb) = prettyAnn bFocus (p + 1) b
+        core = as ++ " " ++ sym ++ " " ++ bs
+        sp | opFocus   = Just (length as + 1, length sym)
+           | otherwise = case spa of
+               Just s  -> Just s
+               Nothing -> shiftSpan (length as + length sym + 2) spb
+    in  applyWrap p prec core sp
   App f a ->
     let funFocus = case focus of
           Just (InFun p) -> Just p
@@ -55,13 +76,13 @@ prettyAnn focus prec expr = case expr of
         argFocus = case focus of
           Just (InArg p) -> Just p
           _              -> Nothing
-        (fs, spf) = prettyAnn funFocus 1 f
-        (as, spa) = prettyAnn argFocus 2 a
+        (fs, spf) = prettyAnn funFocus 4 f
+        (as, spa) = prettyAnn argFocus 5 a
         core = fs ++ " " ++ as
         sp = case spf of
           Just s  -> Just s
           Nothing -> shiftSpan (length fs + 1) spa
-    in  applyWrap 1 prec core sp
+    in  applyWrap 4 prec core sp
   abs'@(Lam {}) ->
     let (xs, body, bodyFocus) = splitLams focus abs'
         (bodyS, spb) = prettyAnn bodyFocus 0 body
@@ -69,6 +90,14 @@ prettyAnn focus prec expr = case expr of
         core = prefix ++ bodyS
         sp = shiftSpan (length prefix) spb
     in  applyWrap 0 prec core sp
+
+-- | Primitive names with an infix spelling and its precedence (the parser
+-- reads the operators, the printer writes them back).
+infixOps :: [(Name, (String, Int))]
+infixOps =
+  [ ("lt", ("<", 1)), ("eq", ("==", 1))
+  , ("plus", ("+", 2)), ("minus", ("-", 2))
+  , ("mult", ("*", 3)) ]
 
 joinWith :: String -> [String] -> String
 joinWith _ [] = ""

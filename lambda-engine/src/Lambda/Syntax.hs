@@ -122,7 +122,7 @@ data Stmt
   | SChain SrcPos Name ChainOpts [(Maybe Arrow, Expr)]
   | SType SrcPos Name (Maybe Type)          -- ^ Nothing = @none@
   | SChurch SrcPos Name Expr
-  | SInhabit SrcPos Type [Name]
+  | SInhabit SrcPos Type (Maybe Int) [Name]  -- ^ @inhabit T (k): names@ — at least @k@ inhabitants
   | SFamily SrcPos Type Expr
   deriving (Eq, Show)
 

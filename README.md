@@ -17,7 +17,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 sudo apt install build-essential curl libffi-dev libgmp-dev libncurses-dev pkg-config
 ```
 
-На старых версиях Ubuntu дополнительно нужен `libtinfo-dev`. Список для других дистрибутивов — на [странице установки ghcup](https://www.haskell.org/ghcup/install/#system-requirements).
+На старых версиях Ubuntu дополнительно нужен `libtinfo-dev`. Fedora: `sudo dnf install gcc gcc-c++ gmp gmp-devel make ncurses ncurses-devel xz perl`; Arch и Manjaro: `sudo pacman -S --needed base-devel gmp ncurses`; openSUSE: `sudo zypper install gcc gcc-c++ gmp-devel make ncurses-devel xz perl`. Полный список — на [странице установки ghcup](https://www.haskell.org/ghcup/install/#system-requirements). Если компилятор уже стоит, а первая сборка домашки падает с упоминанием `terminfo` или `tinfo`, не хватает именно `ncurses-devel` (`libncurses-dev`): его требует интерпретатор λ-термов.
 
 Windows (PowerShell, команда с сайта ghcup):
 
