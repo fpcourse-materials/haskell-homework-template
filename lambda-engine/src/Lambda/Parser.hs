@@ -148,9 +148,10 @@ pTypeOrNone = (Nothing <$ keyword "none") <|> (Just (TVar "...") <$ symbol "..."
 pNamesOrNone :: Parser [Name]
 pNamesOrNone = ([] <$ keyword "none") <|> pNamesOrHole
 
--- | A list of names, or @...@ for "not answered yet".
+-- | A list of names — comma-separated (@p1, p2@), the commas may be omitted — or
+-- @...@ for "not answered yet".
 pNamesOrHole :: Parser [Name]
-pNamesOrHole = (["..."] <$ symbol "...") <|> many ident
+pNamesOrHole = (["..."] <$ symbol "...") <|> many (ident <* optional (symbol ","))
 
 pPredicate :: Parser Predicate
 pPredicate = do

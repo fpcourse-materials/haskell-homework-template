@@ -121,9 +121,12 @@ parseTests = group "parse"
   , case prog "expect x + 1 = 2\n" of
       Right [SExpect _ a b] -> eq "infix before =" (App (App (Var "plus") (Var "x")) (Lit 1), Lit 2) (a, b)
       other -> eq "infix before =" "expect" (show other)
-  , case prog "inhabit a -> a -> a (2): p1 p2\n" of
+  , case prog "inhabit a -> a -> a (2): p1, p2\n" of
       Right [SInhabit _ _ k ns] -> eq "inhabit count" (Just 2, ["p1", "p2"]) (k, ns)
       other -> eq "inhabit count" "inhabit" (show other)
+  , case prog "inhabit a -> a: p1 p2 p3\n" of
+      Right [SInhabit _ _ k ns] -> eq "inhabit names without commas" (Nothing, ["p1", "p2", "p3"]) (k, ns)
+      other -> eq "inhabit names without commas" "inhabit" (show other)
   , eq "subst" (Subst [("x", Var "S")] (App (Var "x") (Var "y"))) (mustParse "([x |-> S] x y)")
   , eq "subst2" (Subst [("x", Var "S"), ("y", Var "K")] (Var "x")) (mustParse "([x |-> S, y |-> K] x)")
   , ok "subst with := rejected" (isLeft' (parseExpr "([x := S] x)"))
