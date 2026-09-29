@@ -110,14 +110,19 @@ library meta-utils
     PP
     TodoException
     TodoMacro
+    TypeCheck
   build-depends:
-    template-haskell
+    , template-haskell
+    , HUnit
 
 test-suite meta-utils-test
   import: shared
   type: exitcode-stdio-1.0
   hs-source-dirs: meta-utils/test
   main-is: Spec.hs
+  other-modules:
+    TypeCheckSamples
+    TypeCheckSpec
   build-depends:
     , meta-utils
     , HUnit

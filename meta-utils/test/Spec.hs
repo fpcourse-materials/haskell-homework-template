@@ -3,6 +3,7 @@ import Data.Functor.Identity
 import MetaUtils
 import Test.HUnit (Test (..), assertFailure, assertEqual)
 import Test.HUnit qualified as HU
+import TypeCheckSpec qualified
 
 data Data a = Ok !a | NotOk deriving Show
 data Data' f a = Ok' !(f a) | NotOk' deriving Show
@@ -34,6 +35,7 @@ main :: IO ()
 main = HU.runTestTTAndExit $ TestList
   [ testPP
   , testMacro
+  , TypeCheckSpec.tests
   ]
 
 testPP :: Test
