@@ -1,27 +1,31 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
--- Выражения-эталоны записаны так, как их видит студент в условии.
-{- HLINT ignore "Redundant flip" -}
+-- Выражения-эталоны записаны так, как их видел бы студент в условии.
+{- HLINT ignore "Redundant lambda" -}
+{- HLINT ignore "Use tuple-section" -}
+{- HLINT ignore "Use (,)" -}
 
 -- | Образцы для тестов "TypeCheck": то, что в домашке лежало бы в модуле студента.
 -- Отдельный модуль нужен Template Haskell: reify видит только уже скомпилированные имена.
+--
+-- Образцы намеренно не совпадают с ответами домашек: этот файл лежит и в репозитории студента.
 module TypeCheckSamples where
 
 import Data.Kind (Type)
 import TypeCheck (Todo)
 
--- Синонимы: пара Чёрча в разных записях.
+-- Синонимы: один и тот же тип в разных записях и его искажения.
 
-type Pair a b = forall c. (a -> b -> c) -> c
-type PairRenamed x y = forall r. (x -> y -> r) -> r
-type PairParens a b = forall c. ((a -> (b -> c)) -> c)
-type PairKinded a b = forall (c :: Type). (a -> b -> c) -> c
-type PairSwappedArgs a b = forall c. (b -> a -> c) -> c
-type PairSwappedParams b a = forall c. (a -> b -> c) -> c
-type PairExtraParam a b c = (a -> b -> c) -> c
-type PairTuple a b = (a, b)
+type Sample a b = forall c. (a -> c) -> b -> (c, b)
+type SampleRenamed x y = forall r. (x -> r) -> y -> (r, y)
+type SampleParens a b = forall c. ((a -> c) -> (b -> (c, b)))
+type SampleKinded a b = forall (c :: Type). (a -> c) -> b -> (c, b)
+type SampleSwappedArgs a b = forall c. b -> (a -> c) -> (c, b)
+type SampleSwappedParams b a = forall c. (a -> c) -> b -> (c, b)
+type SampleExtraParam a b c = (a -> c) -> b -> (c, b)
+type SampleOther a b = (a, b)
 
-type Nat = forall a. (a -> a) -> a -> a
+type NoParams = forall a. (a -> a -> a) -> a
 
 type Stub = Todo
 type StubWithParams a b = Todo
@@ -34,20 +38,20 @@ data NotSynonym = NotSynonym
 
 -- Значения с сигнатурами: проверяется только запись типа, поэтому тела — заглушки.
 
-constLike :: a -> b -> a
-constLike = undefined
+keepFirst :: a -> b -> a
+keepFirst = undefined
 
-constLikeRenamed :: x -> y -> x
-constLikeRenamed = undefined
+keepFirstRenamed :: x -> y -> x
+keepFirstRenamed = undefined
 
-constLikeExplicit :: forall a b. a -> b -> a
-constLikeExplicit = undefined
+keepFirstExplicit :: forall a b. a -> b -> a
+keepFirstExplicit = undefined
 
-constLikeReordered :: forall b a. a -> b -> a
-constLikeReordered = undefined
+keepFirstReordered :: forall b a. a -> b -> a
+keepFirstReordered = undefined
 
-flipConstLike :: a -> b -> b
-flipConstLike = undefined
+keepSecond :: a -> b -> b
+keepSecond = undefined
 
 tooSpecific :: Int -> Bool -> Int
 tooSpecific = undefined
@@ -73,22 +77,26 @@ stubValue = undefined
 -- Значения без сигнатур: их тип выводит GHC. Так в тесте записывается эталон задачи
 -- «предскажите тип выражения» — выражением, а не ответом.
 
-inferredConstId = const id
-inferredFlipConst = flip const
-inferredUncurry = uncurry (flip const)
-inferredCompose f g x = f (g x)
+inferredTwice = \f x -> f (f x)
+inferredSwap = \(x, y) -> (y, x)
+inferredApplyTo = \x f -> f x
+inferredPairWith = \x y -> (x, y)
+inferredPairWithFlipped = flip (\y x -> (x, y))
 
-predictedConstId :: b -> a -> a
-predictedConstId = undefined
+predictedTwice :: (a -> a) -> a -> a
+predictedTwice = undefined
 
-predictedFlipConst :: p -> q -> q
-predictedFlipConst = undefined
+predictedSwap :: (p, q) -> (q, p)
+predictedSwap = undefined
 
-predictedUncurry :: (x, y) -> y
-predictedUncurry = undefined
+predictedApplyTo :: t -> (t -> r) -> r
+predictedApplyTo = undefined
 
-predictedUncurryWrong :: (x, y) -> x
-predictedUncurryWrong = undefined
+predictedApplyToWrong :: t -> (r -> t) -> r
+predictedApplyToWrong = undefined
 
-predictedCompose :: (b -> c) -> (a -> b) -> a -> c
-predictedCompose = undefined
+predictedTwiceTooGeneral :: (a -> b) -> a -> b
+predictedTwiceTooGeneral = undefined
+
+predictedTwiceTooSpecific :: (Int -> Int) -> Int -> Int
+predictedTwiceTooSpecific = undefined

@@ -21,26 +21,28 @@
 
 ```haskell
 -- src/Level3.hs
-type Pair a b = Todo
+type Handler a b = Todo
 
 -- test/SpecLevel3.hs
-assertShape "3.1 Pair" "2 (forall v3 (-> (-> v1 (-> v2 v3)) v3))" $(synonymShape ''Pair)
+assertShape "3.1" "2 (forall v3 (-> (-> v1 v3) (-> v2 ((,) v3 v2))))" $(synonymShape ''Handler)
 ```
 
-Ожидаемую строку не пишут руками: её печатают с эталона, например в `cabal repl homework-test` командой `putStrLn $(synonymShape ''Pair)` на ветке `solutions`.
+Ожидаемую строку не пишут руками: её печатают с эталона, например в `cabal repl homework-test` командой `putStrLn $(synonymShape ''Handler)` на ветке `solutions`.
 
 Предсказание типа выражения. Студент пишет сигнатуру при заглушке, эталон в тесте записан выражением без сигнатуры, и его тип выводит GHC:
 
 ```haskell
 -- src/Level1.hs
-constId :: Todo        -- замените Todo типом выражения `const id`
-constId = todo "1.6"
+twice :: Todo                   -- замените Todo типом выражения `\f x -> f (f x)`
+twice = todo "1.6"
 
 -- test/SpecLevel1.hs
-reference = const id   -- без сигнатуры
+reference = \f x -> f (f x)     -- без сигнатуры
 
-assertShape "1.6" $(shapeOfType 'reference) $(shapeOfType 'constId)
+assertShape "1.6" $(shapeOfType 'reference) $(shapeOfType 'twice)
 ```
+
+Примеры в этом файле и образцы в тестах не должны совпадать с ответами домашек: пакет лежит и в репозитории студента.
 
 Эталон должен лежать в модуле, который скомпилирован раньше модуля со сплайсом, или выше по файлу за объявлением-сплайсом: `reify` видит только уже проверенные имена. Если у выражения есть ограничения классов, эталон записывают функцией с аргументом или включают `NoMonomorphismRestriction`, иначе GHC подставит тип по умолчанию.
 

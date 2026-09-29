@@ -26,45 +26,45 @@ same, different :: String -> String -> String -> Test
 same what l r = TestCase $ assertEqual what l r
 different what l r = TestCase $ assertBool (what <> ": формы совпали: " <> l) $ l /= r
 
-pair :: String
-pair = $(synonymShape ''Pair)
+sample :: String
+sample = $(synonymShape ''Sample)
 
 testSynonymSame :: Test
 testSynonymSame = TestList
-  [ same "имена переменных" pair $(synonymShape ''PairRenamed)
-  , same "лишние скобки" pair $(synonymShape ''PairParens)
-  , same "аннотация кайнда Type" pair $(synonymShape ''PairKinded)
+  [ same "имена переменных" sample $(synonymShape ''SampleRenamed)
+  , same "лишние скобки" sample $(synonymShape ''SampleParens)
+  , same "аннотация кайнда Type" sample $(synonymShape ''SampleKinded)
   , same "String и [Char]" $(synonymShape ''Name) $(synonymShape ''NameAsList)
   ]
 
 testSynonymDifferent :: Test
 testSynonymDifferent = TestList
-  [ different "порядок аргументов функции" pair $(synonymShape ''PairSwappedArgs)
-  , different "порядок параметров синонима" pair $(synonymShape ''PairSwappedParams)
-  , different "лишний параметр вместо квантора" pair $(synonymShape ''PairExtraParam)
-  , different "другой тип" pair $(synonymShape ''PairTuple)
-  , different "пара и число" pair $(synonymShape ''Nat)
+  [ different "порядок аргументов функции" sample $(synonymShape ''SampleSwappedArgs)
+  , different "порядок параметров синонима" sample $(synonymShape ''SampleSwappedParams)
+  , different "лишний параметр вместо квантора" sample $(synonymShape ''SampleExtraParam)
+  , different "другой тип" sample $(synonymShape ''SampleOther)
+  , different "другой синоним с квантором" sample $(synonymShape ''NoParams)
   ]
 
 testSynonymExact :: Test
 testSynonymExact = TestList
-  [ same "пара Чёрча" "2 (forall v3 (-> (-> v1 (-> v2 v3)) v3))" pair
-  , same "число Чёрча" "0 (forall v1 (-> (-> v1 v1) (-> v1 v1)))" $(synonymShape ''Nat)
+  [ same "параметры и квантор" "2 (forall v3 (-> (-> v1 v3) (-> v2 ((,) v3 v2))))" sample
+  , same "без параметров" "0 (forall v1 (-> (-> v1 (-> v1 v1)) v1))" $(synonymShape ''NoParams)
   , same "списки, кортежи, конструкторы" "1 ([] ((,) Int (Maybe v1)))" $(synonymShape ''Table)
   , same "не синоним" "<not a type synonym>" $(synonymShape ''NotSynonym)
   ]
 
-constLikeShape :: String
-constLikeShape = $(shapeOfType 'constLike)
+keepFirstShape :: String
+keepFirstShape = $(shapeOfType 'keepFirst)
 
 testSignatures :: Test
 testSignatures = TestList
-  [ same "точный вид" "(forall v1 v2 (-> v1 (-> v2 v1)))" constLikeShape
-  , same "имена переменных" constLikeShape $(shapeOfType 'constLikeRenamed)
-  , same "явный forall" constLikeShape $(shapeOfType 'constLikeExplicit)
-  , same "порядок переменных под forall" constLikeShape $(shapeOfType 'constLikeReordered)
-  , different "какой аргумент возвращается" constLikeShape $(shapeOfType 'flipConstLike)
-  , different "частный случай общего типа" constLikeShape $(shapeOfType 'tooSpecific)
+  [ same "точный вид" "(forall v1 v2 (-> v1 (-> v2 v1)))" keepFirstShape
+  , same "имена переменных" keepFirstShape $(shapeOfType 'keepFirstRenamed)
+  , same "явный forall" keepFirstShape $(shapeOfType 'keepFirstExplicit)
+  , same "порядок переменных под forall" keepFirstShape $(shapeOfType 'keepFirstReordered)
+  , different "какой аргумент возвращается" keepFirstShape $(shapeOfType 'keepSecond)
+  , different "частный случай общего типа" keepFirstShape $(shapeOfType 'tooSpecific)
   , same "порядок ограничений" $(shapeOfType 'withContext) $(shapeOfType 'withContextReordered)
   , different "наличие ограничений" $(shapeOfType 'withContext) $(shapeOfType 'withoutContext)
   , different "вложенность квантора" $(shapeOfType 'rankTwo) $(shapeOfType 'rankOne)
@@ -74,12 +74,13 @@ testSignatures = TestList
 -- при заглушке. Формы сравниваются, сам ответ в тесте не записан.
 testPrediction :: Test
 testPrediction = TestList
-  [ same "const id" $(shapeOfType 'inferredConstId) $(shapeOfType 'predictedConstId)
-  , same "flip const" $(shapeOfType 'inferredFlipConst) $(shapeOfType 'predictedFlipConst)
-  , same "uncurry (flip const)" $(shapeOfType 'inferredUncurry) $(shapeOfType 'predictedUncurry)
-  , same "композиция" $(shapeOfType 'inferredCompose) $(shapeOfType 'predictedCompose)
-  , different "неверное предсказание" $(shapeOfType 'inferredUncurry) $(shapeOfType 'predictedUncurryWrong)
-  , same "const id и flip const — один тип" $(shapeOfType 'inferredConstId) $(shapeOfType 'inferredFlipConst)
+  [ same "верное предсказание" $(shapeOfType 'inferredTwice) $(shapeOfType 'predictedTwice)
+  , same "свои имена переменных" $(shapeOfType 'inferredSwap) $(shapeOfType 'predictedSwap)
+  , same "функция-аргумент" $(shapeOfType 'inferredApplyTo) $(shapeOfType 'predictedApplyTo)
+  , different "неверное предсказание" $(shapeOfType 'inferredApplyTo) $(shapeOfType 'predictedApplyToWrong)
+  , different "слишком общий тип" $(shapeOfType 'inferredTwice) $(shapeOfType 'predictedTwiceTooGeneral)
+  , different "слишком частный тип" $(shapeOfType 'inferredTwice) $(shapeOfType 'predictedTwiceTooSpecific)
+  , same "два выражения одного типа" $(shapeOfType 'inferredPairWith) $(shapeOfType 'inferredPairWithFlipped)
   ]
 
 testStub :: Test
@@ -87,7 +88,7 @@ testStub = TestList
   [ TestCase $ assertBool "синоним-заглушка" $ isTodo $(synonymShape ''Stub)
   , TestCase $ assertBool "синоним-заглушка с параметрами" $ isTodo $(synonymShape ''StubWithParams)
   , TestCase $ assertBool "сигнатура-заглушка" $ isTodo $(shapeOfType 'stubValue)
-  , TestCase $ assertBool "ответ — не заглушка" $ not $ isTodo pair
+  , TestCase $ assertBool "ответ — не заглушка" $ not $ isTodo sample
   , TestCase $ assertBool "тип с Todo внутри — не заглушка" $ not $ isTodo "1 (Maybe Todo)"
   ]
 
@@ -103,16 +104,16 @@ outcome = \case
 
 testOutcome :: Test
 testOutcome = TestList
-  [ TestCase $ outcome (assertShape "задача" pair $(synonymShape ''PairRenamed)) >>=
+  [ TestCase $ outcome (assertShape "задача" sample $(synonymShape ''SampleRenamed)) >>=
       assertEqual "верный ответ" Passed
-  , TestCase $ outcome (assertShape "задача" pair $(synonymShape ''Stub)) >>=
+  , TestCase $ outcome (assertShape "задача" sample $(synonymShape ''Stub)) >>=
       assertEqual "заглушка — не провал, а «не начато»" NotStarted
-  , TestCase $ outcome (assertShape "задача" pair $(synonymShape ''PairTuple)) >>= \case
+  , TestCase $ outcome (assertShape "задача" sample $(synonymShape ''SampleOther)) >>= \case
       Failed message -> do
         assertBool "в сообщении есть имя задачи" $ "задача" `isInfixOf` message
-        assertBool "в сообщении нет ожидаемого ответа" $ not $ pair `isInfixOf` message
+        assertBool "в сообщении нет ожидаемого ответа" $ not $ sample `isInfixOf` message
       other -> assertFailure $ "неверный ответ должен быть провалом, а получено " <> show other
-  , TestCase $ outcome (assertShapeMarked "задача" "Todo" pair pair) >>=
+  , TestCase $ outcome (assertShapeMarked "задача" "Todo" sample sample) >>=
       assertEqual "маркер-заглушка важнее совпадения формы" NotStarted
   ]
 
