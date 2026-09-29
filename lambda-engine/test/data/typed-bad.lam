@@ -40,3 +40,8 @@ task 3.4 (константы)
 expect plus 1 true = 2
 double := \n. plus n n
 type double = Int -> Int -> Int
+
+task 3.5 (ответ не в нормальной форме)
+nf double 21 = plus 21 21
+nf (\n. plus n (mult 2 3)) = \n. plus n (mult 2 3)
+nf double 21 = 42

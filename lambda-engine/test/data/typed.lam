@@ -44,3 +44,6 @@ expect if (lt 1 2) 10 20 = 10
 type double = Int -> Int
 type plus = Int -> Int -> Int
 expect mult 6 7 = 42
+nf double 21 = 42
+nf if (lt 1 2) 10 20 = 10
+nf (\n. plus n (mult 2 3)) = \n. plus n 6

@@ -48,6 +48,7 @@ module Lambda.Eval
   , isNf
   , normalizing
   , primNames
+  , spine
   ) where
 
 import Data.Maybe (isJust)

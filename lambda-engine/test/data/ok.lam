@@ -114,3 +114,27 @@ divides3 := \n. thrd (n magic (three false false true))
 expect divides3 9 = true
 expect divides3 10 = false
 expect divides3 30 = true
+
+task 3.6 (ответ — нормальная форма)
+-- Значение — терм без редексов после раскрытия имён...
+nf K I S = I
+nf K I S = \x. x
+nf (\x y. x) y = \z. y
+nf and (not false) true = true
+nf plus 2 1 = 3
+nf plus 2 1 = \s z. s (s (s z))
+nf Y (K 5) = 5
+nf I x (I y) = x y
+-- ...или данные, собранные конструкторами из значений. Конструктор узнаётся
+-- по определению, а не по имени.
+inl := \a l r. l a
+inr := \b l r. r b
+nf pair (I 1) (not true) = pair 1 false
+nf cons (mult 2 2) (cons (mult 3 3) nil) = cons 4 (cons 9 nil)
+nf (cons (mult 2 2) nil) = (cons 4 nil)
+nf inr (plus 1 1) = inr 2
+nf C pair (inl 1) (K true x) = pair true (inl 1)
+nf triple x (I y) z = triple x y z
+nf (\a. pair a (I a)) = \a. pair a a
+nf B cons I 1 = cons 1
+check w1: not nf

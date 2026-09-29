@@ -17,7 +17,7 @@ import Lambda.Eval (normalize, parseStrategy, prettyStrategy)
 import Lambda.Need (normalizeNeed)
 import Lambda.Pretty (prettyTypeGreek2)
 import Lambda.Subst (barendregt, binders, etaContractions, hasHole, parenCount)
-import Lambda.Syntax (Arrow (..), ChainOpts (..))
+import Lambda.Syntax (Arrow (..), ChainOpts (..), Predicate (..))
 import Lambda.Types (prettyTypeError, primTypes)
 
 main :: IO ()
@@ -121,6 +121,14 @@ parseTests = group "parse"
   , case prog "expect x + 1 = 2\n" of
       Right [SExpect _ a b] -> eq "infix before =" (App (App (Var "plus") (Var "x")) (Lit 1), Lit 2) (a, b)
       other -> eq "infix before =" "expect" (show other)
+  , case prog "nf K I S = I\n" of
+      Right [SNormal _ a b] -> eq "nf statement" (App (App (Var "K") (Var "I")) (Var "S"), Var "I") (a, b)
+      other -> eq "nf statement" "nf" (show other)
+  , case prog "check t: nf, not nf\n" of
+      Right [SCheck _ _ ps] -> eq "nf is still a predicate" [PNf, PNot PNf] ps
+      other -> eq "nf is still a predicate" "check" (show other)
+  , ok "nf is a keyword" (isLeft' (parseExpr "nf x"))
+  , ok "a name may start with nf" (mustParse "nfoo x" == App (Var "nfoo") (Var "x"))
   , case prog "inhabit a -> a -> a (2): p1, p2\n" of
       Right [SInhabit _ _ k ns] -> eq "inhabit count" (Just 2, ["p1", "p2"]) (k, ns)
       other -> eq "inhabit count" "inhabit" (show other)
@@ -667,7 +675,7 @@ fileTests = do
     [ group "ok.lam" $ case ok' of
         Left err -> [ok ("loads: " ++ err) False]
         Right tasks ->
-          [ eq "tasks" 11 (length tasks)
+          [ eq "tasks" 12 (length tasks)
           , TestList [ eq (trId t ++ " " ++ show (trChecks t)) Done (taskStatus t) | t <- tasks ]
           , ok "reportOk" (reportOk tasks)
           , ok "prettyResults" ("task 1.1 (скобки): DONE" `isInfixOf` prettyResults tasks)
@@ -749,7 +757,7 @@ errorFileTests = do
   typedBad <- dataFile "test/data/typed-bad.lam" >>= checkFile
   return $ group "error files"
     [ group "errors.lam" $ withTasks errs $ \tasks task status says ->
-        [ eq "task count" 21 (length tasks)
+        [ eq "task count" 22 (length tasks)
         , eq "2.1 duplicate" Failed (status "2.1")
         , eq "2.1 duplicate reported once per definition" 2 (length (trChecks (task "2.1")))
         , says "2.1" "повторное определение ‘dup’"
@@ -802,6 +810,19 @@ errorFileTests = do
         , eq "2.20 unknown name in expect" Failed (status "2.20")
         , says "2.20" "не определено: nope"
         , eq "2.21 empty section" Done (status "2.21")
+        , eq "2.22 answer is not a normal form" (Partial 1 12) (status "2.22")
+        , says "2.22" "справа не нормальная форма: ‘K 5 (Y (K 5))’ ещё можно вычислить"
+        , says "2.22" "‘succ (succ 1)’ ещё можно вычислить"
+        , says "2.22" "‘succ 1 succ 1’ ещё можно вычислить"
+        , says "2.22" "‘(\\x y. x) y’ ещё можно вычислить"
+        , says "2.22" "‘and (\\t e. t) (\\t e. t)’ ещё можно вычислить"
+        , says "2.22" "справа не нормальная форма: ‘2 * 2’ ещё можно вычислить"
+        , says "2.22" "справа не нормальная форма: ‘I x’ ещё можно вычислить"
+        , says "2.22" "‘pair 1 2 K’ ещё можно вычислить"
+        , says "2.22" "справа не нормальная форма: ‘I 2’ ещё можно вычислить"
+        , says "2.22" "слева получается ⌜3⌝, а справа ⌜4⌝"
+        , eq "2.22 a wrong form is not a hole, a missing answer is" [True]
+            (filter id [ isHoleMessage m | CheckResult _ (Left m) <- trChecks (task "2.22") ])
         ]
     , group "errors.lam loadFile" $ case errsLd of
         Left err -> [ok ("loads: " ++ err) False]
@@ -831,6 +852,9 @@ errorFileTests = do
         , eq "3.4 constants" Failed (status "3.4")
         , says "3.4" "слева получается plus 1 true, а справа 2"
         , says "3.4" "наиболее общий тип: Int -> Int, а не Int -> Int -> Int"
+        , eq "3.5 answer is not a normal form" (Partial 1 3) (status "3.5")
+        , says "3.5" "справа не нормальная форма: ‘21 + 21’ ещё можно вычислить"
+        , says "3.5" "справа не нормальная форма: ‘2 * 3’ ещё можно вычислить"
         ]
     ]
   where

@@ -26,7 +26,7 @@ import Data.List (intercalate, isSuffixOf, nub, sort, (\\))
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import System.FilePath (takeDirectory, (</>), (<.>), takeExtension)
 
-import Lambda.Decode (prettyDecoded)
+import Lambda.Decode (numeral, prettyDecoded)
 import Lambda.Eval
 import Lambda.Parser (churchNumeral, desugarNumerals, parseProgram)
 import Lambda.Pretty (prettyExpr, prettyType, prettyTypeGreek, prettyTypeGreek2)
@@ -154,6 +154,7 @@ desugarStmt Typed s = s
 desugarStmt Pure s = case s of
   SDef p n e -> SDef p n (d e)
   SExpect p a b -> SExpect p (d a) (d b)
+  SNormal p a b -> SNormal p (d a) (d b)
   SRename p n e -> SRename p n (d e)
   SMinimal p n e raw -> SMinimal p n (d e) raw
   SChain p n o ls -> SChain p n o { chainFrom = fmap d (chainFrom o), chainTo = fmap d (chainTo o) }
@@ -274,6 +275,7 @@ runStmt ld ctx stmt = case stmt of
   SType pos _ (Just (TVar "...")) -> one pos (Left answerHole)
   SInhabit pos _ _ ["..."] -> one pos (Left answerHole)
   SExpect pos a b -> one pos (checkExpect ld ctx a b)
+  SNormal pos a b -> one pos (checkNormal ld ctx a b)
   SFree pos n xs -> one pos (checkFree ld n xs)
   SRename pos n e -> one pos (checkRename ld n e)
   SMinimal pos n e raw -> one pos (checkMinimal ld n e raw)
@@ -317,6 +319,100 @@ checkExpect ld ctx a b = guarded ld [a, b] $
     Equal -> Right ()
     Differ x y -> Left ("слева получается " ++ prettyDecoded x ++ ", а справа " ++ prettyDecoded y)
     Undecided -> Left "не удалось сравнить за лимит шагов (возможно, терм расходится)"
+
+-- | @nf A = B@: the comparison of @expect@, and the answer @B@ has to be
+-- written as a value. A term that still reduces (@pred 3@ for ⌜2⌝) is
+-- β-equal to the answer, so @expect@ accepts it, but it is not the normal
+-- form the task asks for. The form is checked first: the message about it
+-- does not tell whether the term is equal to the answer.
+checkNormal :: Loaded -> Ctx -> Expr -> Expr -> Either String ()
+checkNormal ld ctx a b = guarded ld [a, b] $
+  case unfinished ld ctx b of
+    [] -> checkExpect ld ctx a b
+    (t : _) -> Left ("справа не нормальная форма: ‘" ++ prettyExpr (digits t) ++ "’ ещё можно вычислить")
+  where
+    -- The answer the way it was written: numerals back to digits.
+    digits e
+      | ldLanguage ld == Pure, Just n <- numeral e = Lit n
+      | otherwise = case e of
+          Lam x t body -> Lam x t (digits body)
+          App f arg -> App (digits f) (digits arg)
+          _ -> e
+
+-- | Subterms of an answer that are left to compute, outermost first; none
+-- means the answer is written as a value. A value is
+--
+-- * a term without redexes once the names are unfolded: @I@, @true@, @3@, @\\z. y@;
+-- * data built from values by a constructor: @pair 1 true@, @cons 4 (cons 9 nil)@,
+--   @inl 3@ — unfolded, such a term has redexes, but they only put the
+--   fields in place;
+-- * a variable applied to values, an abstraction with a value for the body.
+unfinished :: Loaded -> Ctx -> Expr -> [Expr]
+unfinished ld ctx = go []
+  where
+    env = ldEnv ld
+    ctx' = ctx { ctxEnv = [] }
+
+    go bound e
+      | isJust (findRedex Lazy ctx' (expandUnder bound e)) = inside bound e
+      | otherwise = []
+
+    inside bound e = case e of
+      Lam x _ body -> go (x : bound) body
+      App _ _ | (Var h, args) <- spine e ->
+        let below = concatMap (go bound) args
+        in  if accepts bound h (length args) then below
+            -- a primitive waits for its arguments: @n + 2 * 3@ is stuck on @2 * 3@
+            else if primitive bound h && not (null below) then below
+            else [e]
+      _ -> [e]
+
+    -- The head takes this many arguments without anything to compute:
+    -- a variable takes any number, a constructor no more than it has fields.
+    accepts bound h n
+      | h `elem` bound = True
+      | Just def <- lookup h env = maybe False (n <=) (fields def)
+      | otherwise = not (primitive bound h)
+
+    primitive bound h = ldLanguage ld == Typed && h `elem` primNames && h `notElem` bound
+
+    fields def = case normalize ctx' limit (expandAll env def) of
+      Right t -> constructorFields (erase t)
+      Left _ -> Nothing
+
+    -- Names bound around the subterm are variables even if the file
+    -- defines them: unfold under the same binders.
+    expandUnder bound e = strip (length bound) (expandAll env (foldl (flip lam) e bound))
+    strip :: Int -> Expr -> Expr
+    strip n (Lam _ _ body) | n > 0 = strip (n - 1) body
+    strip _ e = e
+
+-- | The number of fields, if the term is a data constructor of a Church or
+-- Scott encoding: @\\x1 .. xn h1 .. hm. hj a1 .. an@ — the fields, then the
+-- handlers, and in the body one handler applied to the fields in order; a
+-- recursive field is given the handlers first, as the tail in
+-- @cons = \\x t f z. f x (t f z)@. So @pair@, @cons@, @inl@, @inr@ are
+-- constructors whatever a homework calls them, and @K@, @plus@, @pred@ are not.
+--
+-- The successor has this shape too, but it is not counted: a number is
+-- written in digits, and @suc (suc 1)@ is a computation left unfinished.
+constructorFields :: Expr -> Maybe Int
+constructorFields def
+  | Var h <- hd
+  , h `elem` handlers
+  , nub params == params
+  , length fieldNames == length args
+  , and (zipWith field fieldNames args)
+  , not (alphaEq def successor) = Just (length args)
+  | otherwise = Nothing
+  where
+    (params, body) = binders' def
+    (hd, args) = spine body
+    (fieldNames, handlers) = splitAt (length args) params
+    field x arg = arg == Var x || arg == apps (Var x) (map Var handlers)
+    binders' (Lam x _ e) = let (xs, b) = binders' e in (x : xs, b)
+    binders' e = ([], e)
+    successor = lam "n" (lam "s" (lam "z" (App (Var "s") (apps (Var "n") [Var "s", Var "z"]))))
 
 checkFree :: Loaded -> Name -> [Name] -> Either String ()
 checkFree ld n xs = do

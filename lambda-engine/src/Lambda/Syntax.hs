@@ -115,6 +115,7 @@ data Stmt
   | SRule SrcPos String                     -- ^ kept for the reader, ignored
   | SDef SrcPos Name Expr
   | SExpect SrcPos Expr Expr
+  | SNormal SrcPos Expr Expr                -- ^ @nf A = B@: like @expect@, and @B@ is written as a value
   | SFree SrcPos Name [Name]
   | SRename SrcPos Name Expr
   | SMinimal SrcPos Name Expr String        -- ^ the raw text, for the parentheses count

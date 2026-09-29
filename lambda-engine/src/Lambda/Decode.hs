@@ -4,6 +4,7 @@
 module Lambda.Decode
   ( decode
   , prettyDecoded
+  , numeral
   ) where
 
 import Data.List (intercalate)

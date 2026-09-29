@@ -50,7 +50,7 @@ symbol = L.symbol sc
 
 reserved :: [String]
 reserved =
-  [ "language", "import", "vars", "task", "rule", "expect", "free", "rename"
+  [ "language", "import", "vars", "task", "rule", "expect", "nf", "free", "rename"
   , "minimal", "check", "chain", "type", "church", "inhabit", "family" ]
 
 ------------------------------------------------------------------------
@@ -94,7 +94,8 @@ pStmt = do
     , keyword "task"     *> pTask pos
     , keyword "rule"     *> (SRule pos <$> restOfLine)
     , keyword "expect"   *> (SExpect pos <$> pExpr <* symbol "=" <*> pExpr)
-    , keyword "free"     *> (SFree pos <$> ident <* symbol "=" <*> pNamesOrHole)
+    , keyword "nf"       *> (SNormal pos <$> pExpr <* symbol "=" <*> pExpr)
+    , keyword "free"    *> (SFree pos <$> ident <* symbol "=" <*> pNamesOrHole)
     , keyword "rename"   *> (SRename pos <$> ident <* symbol "=" <*> pExpr)
     , keyword "minimal"  *> pMinimal pos
     , keyword "check"    *> (SCheck pos <$> ident <* symbol ":" <*> pPredicate `sepBy1` symbol ",")
@@ -153,9 +154,11 @@ pNamesOrNone = ([] <$ keyword "none") <|> pNamesOrHole
 pNamesOrHole :: Parser [Name]
 pNamesOrHole = (["..."] <$ symbol "...") <|> many (ident <* optional (symbol ","))
 
+-- | The predicate @nf@ shares its spelling with the statement @nf A = B@, so
+-- the name of a predicate is read as a plain word, not as an identifier.
 pPredicate :: Parser Predicate
 pPredicate = do
-  name <- ident
+  name <- lexeme (some (satisfy identChar)) <?> "predicate"
   case name of
     "not"         -> PNot <$> pPredicate
     "closed"      -> return PClosed
