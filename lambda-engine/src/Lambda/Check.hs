@@ -654,7 +654,7 @@ checkInhabit :: Loaded -> Ctx -> String -> Type -> Maybe Int -> [Name] -> [Check
 checkInhabit ld ctx label ty wanted names
   | null names =
       [CheckResult label $
-        if inhabitable 4 ty then Left ("тип " ++ prettyType ty ++ " населён, обитатель есть") else Right ()]
+        if inhabitableWith literals 4 ty then Left ("тип " ++ prettyType ty ++ " населён, обитатель есть") else Right ()]
   | otherwise =
       let each = [ CheckResult (label ++ " → " ++ n) (inhabitant ld ctx ty n) | n <- names ]
           distinctCheck = [ CheckResult (label ++ " → попарно различны") (distinct ld ctx names) | length names > 1 ]
@@ -664,6 +664,8 @@ checkInhabit ld ctx label ty wanted names
                            else Left ("перечислено " ++ show (length names) ++ ", а нужно " ++ show k)
                        | Just k <- [wanted] ]
       in  each ++ distinctCheck ++ countCheck
+  where
+    literals = if ldLanguage ld == Typed then [TCon "Int", TCon "Bool"] else []
 
 inhabitant :: Loaded -> Ctx -> Type -> Name -> Either String ()
 inhabitant ld _ ty n = do
@@ -672,12 +674,14 @@ inhabitant ld _ ty n = do
 
 inhabitantTerm :: Loaded -> Type -> Expr -> Either String ()
 inhabitantTerm ld ty t
-  | not (null (freeVars t)) = Left ("терм не замкнут, свободны: " ++ unwords (freeVars t))
+  | not (null free) = Left ("терм не замкнут, свободны: " ++ unwords free)
   | otherwise = case inferType (typeEnv ld) t of
       Left err -> Left ("терм не типизируется: " ++ typeErr err)
       Right p
         | isInstanceOf ty p -> Right ()
         | otherwise -> Left ("тип терма " ++ prettyTypeGreek p ++ " не обобщает " ++ prettyType ty)
+  where
+    free = freeVars t \\ map fst (typeEnv ld)
 
 distinct :: Loaded -> Ctx -> [Name] -> Either String ()
 distinct ld ctx names = do
@@ -709,9 +713,13 @@ checkFamily ld ctx label ty f =
             ((a, b) : _) -> Left ("F ⌜" ++ show a ++ "⌝ и F ⌜" ++ show b ++ "⌝ αβη-эквивалентны")
       in  each ++ [distinctCheck]
 
--- | Bounded search for a closed inhabitant in long normal form.
+-- | Bounded search for a closed pure lambda-term in long normal form.
 inhabitable :: Int -> Type -> Bool
-inhabitable depth0 = go depth0 []
+inhabitable = inhabitableWith []
+
+-- Closed constants can be used alongside bound variables during the search.
+inhabitableWith :: [Type] -> Int -> Type -> Bool
+inhabitableWith constants depth0 = go depth0 constants
   where
     go depth ctx ty
       | depth <= 0 = False

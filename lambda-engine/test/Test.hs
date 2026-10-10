@@ -25,9 +25,10 @@ main = do
   setupConsole
   files <- fileTests
   errorFiles <- errorFileTests
+  inhabitants <- inhabitantFileTests
   result <- runTestTT $ TestList
     [ parseTests, evalTests, substTests, typeTests, decodeTests, prettyTests
-    , colorTests, explainTests, commandTests, propertyTests, files, errorFiles ]
+    , colorTests, explainTests, commandTests, propertyTests, files, errorFiles, inhabitants ]
   if errors result + failures result == 0 then exitSuccess else exitFailure
 
 ------------------------------------------------------------------------
@@ -749,6 +750,35 @@ fileTests = do
 ------------------------------------------------------------------------
 -- Files: deliberate mistakes and the messages a student reads
 ------------------------------------------------------------------------
+
+-- Exercise the whole .lam checking path: constants must be available only
+-- in language typed, including when used as arguments to bound functions.
+inhabitantFileTests :: IO Test
+inhabitantFileTests = do
+  typed <- dataFile "test/data/inhabit-typed.lam" >>= checkFile
+  pureFile <- dataFile "test/data/inhabit-pure.lam" >>= checkFile
+  return $ group "inhabitants and literals"
+    [ statuses "typed" typed
+        [ ("1.1", Failed), ("1.2", Failed), ("1.3", Failed), ("1.4", Failed)
+        , ("1.5", Done), ("1.6", Done)
+        , ("2.1", Failed), ("2.2", Failed), ("2.3", Failed), ("2.4", Failed)
+        , ("2.5", Done), ("2.6", Done)
+        , ("3.1", Done), ("3.2", Done), ("3.3", Done), ("3.4", Done)
+        , ("3.5", Partial 1 2), ("3.6", Partial 4 5)
+        , ("3.7", Done), ("3.8", Failed), ("3.9", Failed)
+        ]
+    , statuses "pure" pureFile
+        [ ("1.1", Done), ("1.2", Done), ("1.3", Done), ("1.4", Done)
+        , ("1.5", Done), ("1.6", Done), ("1.7", Done), ("1.8", Failed)
+        ]
+    ]
+  where
+    statuses label loaded expected = group label $ case loaded of
+      Left err -> [ok ("loads: " ++ err) False]
+      Right tasks ->
+        [ eq tid (Just want) (lookup tid [(trId t, taskStatus t) | t <- tasks])
+        | (tid, want) <- expected
+        ]
 
 errorFileTests :: IO Test
 errorFileTests = do

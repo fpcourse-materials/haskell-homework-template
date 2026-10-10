@@ -6,9 +6,13 @@ cabal.project.local~
 *.hi
 *.o
 *.prof
+__pycache__/
+*.pyc
 
 # Артефакты CI
 report.json
+smoke.log
+repl.log
 report.md
 comment.md
 

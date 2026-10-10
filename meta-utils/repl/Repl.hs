@@ -4,6 +4,7 @@
 -- квалификацией: @Level1.f@, @Level2.f@.
 module Repl () where
 
+import Examples
 import Level1
 import Level2
 import Level3

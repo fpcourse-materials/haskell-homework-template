@@ -96,6 +96,7 @@ library
     Level1
     Level2
     Level3
+    Examples
   build-depends:
     meta-utils
   if flag(lambda)
