@@ -7,3 +7,7 @@
 --
 -- package homework
 --   flags: +lambda
+
+-- Если в домашке есть пример приложения app/Main.hs, включить его:
+-- package homework
+--   flags: +app

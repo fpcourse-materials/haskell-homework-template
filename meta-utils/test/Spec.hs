@@ -4,6 +4,7 @@ import MetaUtils
 import Test.HUnit (Test (..), assertFailure, assertEqual)
 import Test.HUnit qualified as HU
 import TypeCheckSpec qualified
+import PublishSpec qualified
 
 data Data a = Ok !a | NotOk deriving Show
 data Data' f a = Ok' !(f a) | NotOk' deriving Show
@@ -36,6 +37,7 @@ main = HU.runTestTTAndExit $ TestList
   [ testPP
   , testMacro
   , TypeCheckSpec.tests
+  , PublishSpec.tests
   ]
 
 testPP :: Test

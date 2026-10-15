@@ -1,6 +1,6 @@
 module Test.Run (NamedTests, testMain, nameTests) where
 
-import Control.Monad (forM, unless)
+import Control.Monad (forM, unless, when)
 import Data.List qualified as List
 import Data.Maybe (fromMaybe, isJust)
 import System.Environment (lookupEnv, getArgs)
@@ -36,14 +36,24 @@ instance Monoid Counts where
 -- и пишет его в файлы из @HASKELL_TEST_REPORT@ / @HASKELL_TEST_REPORT_JSON@.
 -- Код выхода — закрыт ли уровень 1 (так же красится CI);
 -- с @HASKELL_TEST_STRICT@ — все ли задачи DONE (проверка ветки с решениями).
+-- С @HASKELL_TEST_STARTER@ — все ли задачи ещё TODO/PARTIAL (проверка заготовки).
 testMain :: NamedTests -> IO ()
 testMain tests = do
   testFilters <- getTestFilters
   strict <- isJust <$> lookupEnv "HASKELL_TEST_STRICT"
+  starter <- isJust <$> lookupEnv "HASKELL_TEST_STARTER"
+  when (starter && (strict || not (null testFilters))) do
+    putStrLn "Проверка заготовки требует полного прогона без HASKELL_TEST_STRICT."
+    exitFailure
   -- @HASKELL_TASKS@ подменяет манифест; несуществующий путь даёт пустой манифест
   -- (так `make check FILE=…` проверяет файл, к которому TASKS не относится).
   manifestPath <- fromMaybe "TASKS" <$> lookupEnv "HASKELL_TASKS"
   manifest <- fromMaybe emptyManifest <$> readManifest manifestPath
+  when starter do
+    let expected = manifestTasks manifest
+    unless (not (null expected) && List.sort (map fst tests) == List.sort expected) do
+      putStrLn "Проверка заготовки: нужен непустой TASKS и ровно один набор тестов для каждой задачи."
+      exitFailure
   -- Опечатка в TASKS дала бы задачу, которая вечно TODO, и уровень 1 никогда бы не закрылся.
   let unknown = filter (`notElem` map fst tests) $ manifestTasks manifest
   unless (null unknown) do
@@ -63,7 +73,12 @@ testMain tests = do
   putStr $ showTaskReport taskReport
   putStrLn $ "Level 1: " <> if closed then "closed" else "open (missing: " <> unwords missing <> ")"
   let allDone = all ((== TaskDone) . taskStatus) taskReport
-  if (if strict then allDone else closed) then exitSuccess else exitFailure
+  if starter then case checkStarter manifest taskReport of
+    Left message -> putStrLn ("Проверка заготовки: " <> message) >> exitFailure
+    Right () -> do
+      putStrLn $ "Студенческий шаблон: " <> show (length taskReport) <> " задач, обязательные не закрыты — OK"
+      exitSuccess
+  else if (if strict then allDone else closed) then exitSuccess else exitFailure
   where
     getTestFilters :: IO [String]
     getTestFilters = concatMap words <$> getArgs
@@ -73,6 +88,19 @@ testMain tests = do
 
     statusOf :: TaskReport -> TaskId -> TaskStatus
     statusOf taskReport name = maybe TaskTodo taskStatus $ List.find ((== name) . taskId) taskReport
+
+checkStarter :: Manifest -> TaskReport -> Either String ()
+checkStarter manifest report = do
+  unless (all (isStarterStatus . taskStatus) report) $
+    Left "в заготовке допустимы только статусы TODO и PARTIAL"
+  when (level1Closed manifest (map taskId report) statusOf) $
+    Left "обязательный уровень уже закрыт"
+  where
+    statusOf name = maybe TaskTodo taskStatus $ List.find ((== name) . taskId) report
+    isStarterStatus = \case
+      TaskTodo -> True
+      TaskPartial _ -> True
+      _ -> False
 
 -- | Нумерует тесты уровня: @nameTests 2@ даёт задачи @2.1@, @2.2@, …
 -- Первое число идентификатора — уровень задачи, см. "Test.Manifest".

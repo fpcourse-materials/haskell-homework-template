@@ -7,20 +7,27 @@
 # make check ONLY="1.1 1.2"   то же, но только для перечисленных задач
 # make check FILE=путь.lam    проверить другой .lam-файл (без манифеста TASKS), например учебный
 # make submit [MSG="…"]       сборка, проверка для сведения, коммит и пуш
+# make run [ARGS="…"]         запустить пример приложения, если он есть в домашке
 
 ONLY ?=
 MSG ?=
 FILE ?=
+ARGS ?=
 .DEFAULT_GOAL := help
 
-.PHONY: help build repl lint test check submit
+.PHONY: help build repl lint test check submit run
 
 help:
-	@sed -n '3,9p' Makefile | sed 's/^# //'
+	@sed -n '3,10p' Makefile | sed 's/^# //'
 
 # Собирает только то, что нужно для проверки: библиотеку и тесты домашки.
 build:
 	cabal build homework-test
+
+# app/Main.hs — пример использования решений, его наличие зависит от домашки.
+run:
+	@test -f app/Main.hs || { echo 'В этой домашке нет приложения; используйте make repl.'; exit 1; }
+	cabal run homework-exe -- $(ARGS)
 
 # λ-домашку узнаём по src/hw.lam (или по явному FILE). GHCi открывает модуль Repl,
 # который импортирует все уровни, поэтому в области видимости сразу вся домашка.
@@ -39,7 +46,7 @@ lint:
 	@if [ -f src/hw.lam ]; then \
 	  echo "λ-домашка: линтер Haskell не запускается"; \
 	else \
-	  hlint src test; \
+	  hlint src test $(if $(wildcard app/Main.hs),app); \
 	fi
 
 # С FILE раннер проверяет указанный .lam-файл вместо src/hw.lam; манифест TASKS
@@ -68,10 +75,10 @@ submit: build
 # make checker-test          тесты λ-проверялки, включая регрессионные примеры
 # make checker-check         тесты, строгая сборка и линтер λ-проверялки
 # make tools-test            проверки общих служебных инструментов
-# make check-report          проверить статусы заглушек в report.json по TASKS
+# make check-starter         проверить, что все задачи заготовки ещё TODO/PARTIAL
+# make check-report          совместимое имя для check-starter
 # make verify-build          строгая сборка всех компонентов без публикации
-# make infrastructure-check HOMEWORK=путь  проверить совпадение общих файлов с шаблоном
-# make infrastructure-sync HOMEWORK=путь   обновить общие файлы домашки из шаблона
+# make update-template       получить обновления общего шаблона обычным Git merge
 # make release-status        состояние GitHub и обновления внутреннего шаблона
 # make public-template PUBLIC_REPO=организация/имя  создать и проверить публичный шаблон
 # make solutions-sync        обновить общие файлы и условия из main в ветке solutions
@@ -80,9 +87,8 @@ submit: build
 GH ?= gh
 PUBLIC_REPO ?=
 SOLUTIONS_SOURCE ?=
-HOMEWORK ?=
 
-.PHONY: checker-test checker-check tools-test check-report verify-build infrastructure-check infrastructure-sync release-status public-template solutions-sync publish-template release
+.PHONY: checker-test checker-check tools-test check-starter check-report verify-build update-template release-status public-template solutions-sync publish-template release
 
 checker-test:
 	cabal test lambda-test --test-show-details=direct
@@ -92,21 +98,20 @@ checker-check: checker-test
 	hlint lambda-engine/src lambda-engine/app lambda-engine/test
 
 tools-test:
-	python3 tools/test_tools.py
+	cabal test meta-utils-test --test-show-details=direct
+	hlint meta-utils/admin meta-utils/test
 
-check-report:
-	python3 tools/check_report.py
+check-starter:
+	@test -z "$(ONLY)$(FILE)" || { echo 'Проверка заготовки требует всех задач: не задавайте ONLY и FILE.'; exit 1; }
+	HASKELL_TEST_STARTER=1 HASKELL_TEST_REPORT_JSON=report.json $(MAKE) --no-print-directory test
+
+check-report: check-starter
 
 verify-build:
 	cabal build all --ghc-options=-Werror
 
-infrastructure-check:
-	@test -n "$(HOMEWORK)" || { echo 'Укажите HOMEWORK=путь'; exit 1; }
-	python3 tools/infrastructure.py check "$(HOMEWORK)"
-
-infrastructure-sync:
-	@test -n "$(HOMEWORK)" || { echo 'Укажите HOMEWORK=путь'; exit 1; }
-	python3 tools/infrastructure.py sync "$(HOMEWORK)"
+update-template:
+	git pull --no-rebase template main --no-edit
 
 publish-template: tools-test verify-build
 	@test -n "$(MSG)" || { echo 'Укажите MSG=описание'; exit 1; }
@@ -152,12 +157,10 @@ release:
 	@test -n "$(PUBLIC_REPO)" || { echo 'Укажите PUBLIC_REPO=организация/имя'; exit 1; }
 	@test "$$($(GH) repo view --json isPrivate --jq '.isPrivate')" = true
 	@if [ -n "$(SOLUTIONS_SOURCE)" ]; then test -d "$(SOLUTIONS_SOURCE)/src"; fi
-	git config pull.rebase false
-	git pull template main --no-edit
+	$(MAKE) --no-print-directory update-template
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory verify-build
-	@rm -f report.json
-	HASKELL_TEST_REPORT_JSON=report.json $(MAKE) --no-print-directory test || $(MAKE) --no-print-directory check-report
+	$(MAKE) --no-print-directory check-starter
 	git diff --check
 	@if ! git diff --quiet; then git commit -am "[no ci] $(or $(MSG),Update homework template)"; fi
 	git checkout solutions
@@ -172,4 +175,4 @@ release:
 	git checkout main
 	$(MAKE) --no-print-directory public-template PUBLIC_REPO="$(PUBLIC_REPO)"
 	git push origin main:main
-	git push public main:main
+	cabal run homework-admin -- publish --message "$(or $(MSG),Обновить условия домашнего задания)"
