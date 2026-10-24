@@ -18,7 +18,7 @@ ARGS ?=
 .PHONY: help build repl lint test check submit run
 
 help:
-	@sed -n '3,10p' Makefile | sed 's/^# //'
+	@sed -n '3,11p' Makefile | sed 's/^# //'
 
 # Собирает только то, что нужно для проверки: библиотеку и тесты домашки.
 build:
@@ -83,12 +83,14 @@ submit: build
 # make public-template PUBLIC_REPO=организация/имя  создать и проверить публичный шаблон
 # make solutions-sync        обновить общие файлы и условия из main в ветке solutions
 # make publish-template MSG="…"  проверить, сохранить и запушить общий шаблон
+# make prepare-template MSG="…"  проверить и сохранить общий шаблон локально
 # make release MSG="…"        обновить решения и опубликовать шаблон
 GH ?= gh
 PUBLIC_REPO ?=
 SOLUTIONS_SOURCE ?=
 
 .PHONY: checker-test checker-check tools-test check-starter check-report verify-build update-template release-status public-template solutions-sync publish-template release
+.PHONY: prepare-template
 
 checker-test:
 	cabal test lambda-test --test-show-details=direct
@@ -112,6 +114,14 @@ verify-build:
 
 update-template:
 	git pull --no-rebase template main --no-edit
+
+prepare-template: tools-test verify-build
+	@test -n "$(MSG)" || { echo 'Укажите MSG=описание'; exit 1; }
+	@test "$$(git branch --show-current)" = main
+	@test "$$(git remote get-url origin)" = 'git@github.com:fpcourse-materials/haskell-homework-template.git'
+	git diff --check
+	git add -- Makefile .github/workflows/haskell.yaml
+	@if ! git diff --cached --quiet; then git commit -m "$(MSG)"; fi
 
 publish-template: tools-test verify-build
 	@test -n "$(MSG)" || { echo 'Укажите MSG=описание'; exit 1; }
